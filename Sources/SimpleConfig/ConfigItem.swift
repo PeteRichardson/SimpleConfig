@@ -36,7 +36,7 @@ public struct SecureConfigItem: ConfigStorable {
     public let key: String
 
     public func read() throws -> String? {
-        try Keychain.read(key)
+        try Keychain.read(key, service: service)
     }
 
     public var description: String {
@@ -45,7 +45,7 @@ public struct SecureConfigItem: ConfigStorable {
     }
 
     public func write(_ value: String) throws {
-        try Keychain.write(value, for: key)
+        try Keychain.write(value, for: key, service: service)
     }
 
     public init(service: String, key: String) {

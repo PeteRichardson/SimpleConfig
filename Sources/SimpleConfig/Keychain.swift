@@ -8,9 +8,8 @@ import Foundation
 import Security
 
 enum Keychain {
-    static let service = "com.peterichardson.camview"
 
-    static func write(_ value: String, for key: String) throws {
+    static func write(_ value: String, for key: String, service: String) throws {
         let data = value.data(using: .utf8)!
 
         let query: [String: Any] = [
@@ -31,7 +30,7 @@ enum Keychain {
         }
     }
 
-    static func read(_ key: String) throws -> String? {
+    static func read(_ key: String, service: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
