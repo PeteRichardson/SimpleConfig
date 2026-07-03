@@ -40,11 +40,11 @@ The secret-storage implementation. Each item carries a `service` and a `key`, ma
 An internal enum wrapping the Security framework's C-style API (`SecItemAdd`, `SecItemCopyMatching`, `SecItemDelete`) for generic-password items. Writes use delete-then-add rather than update, which keeps the code simple at the cost of briefly removing the item. Items are stored with `kSecAttrAccessibleAfterFirstUnlock` so background processes can read them after a reboot once the device has been unlocked. This type is deliberately not public — consumers go through `SecureConfigItem`.
 
 **ConfigError** (`Sources/SimpleConfig/ConfigError.swift`)
-A public error enum (`unableToLoad`, `unknown`) intended as the library's error surface. It is currently unreferenced — `Keychain` throws raw `NSError` instead (see Open Questions).
+A public error enum (`unableToLoad`, `unknown`) intended as the library's error surface. `ConfigItem` throws `.unableToLoad` when its `UserDefaults` suite can't be created (e.g. a reserved name like `NSGlobalDomain`); `Keychain` still throws raw `NSError` instead (see Open Questions).
 
 ### Data Flow
 
-When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query, asks the Keychain for one result as `Data`, and decodes it as UTF-8, returning `nil` if the item doesn't exist. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, which never fails — its `throws` annotations exist only to satisfy the shared protocol.
+When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query, asks the Keychain for one result as `Data`, and decodes it as UTF-8, returning `nil` if the item doesn't exist. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, throwing `ConfigError.unableToLoad` if the suite name is invalid (e.g. `NSGlobalDomain` or the app's own bundle identifier); once the suite resolves, reads and writes themselves cannot fail.
 
 ---
 
@@ -54,7 +54,7 @@ When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards t
 
 **Caller-supplied namespaces.** Both the `UserDefaults` suite name and the Keychain service name are constructor parameters rather than constants baked into the library (the service name was hardcoded until commit `5015c76`). This keeps the package reusable across apps and lets one app partition its configuration.
 
-**Redaction over omission.** `SecureConfigItem.description` shows the first and last six characters of a secret rather than hiding it entirely — enough to confirm which key is stored without revealing it.
+**Redaction over omission.** `SecureConfigItem.description` shows a few characters from each end of a secret rather than hiding it entirely — enough to confirm which value is stored without revealing it. The visible count scales with length (`SecureConfigItem.redact`): secrets under 5 characters are hidden completely, at most 6 characters show per side, at least 3 characters always stay hidden, and the mask is a fixed 20 dots so output doesn't leak the secret's length.
 
 No ADRs exist yet; the rationale above is inferred from the code and git history.
 
@@ -74,11 +74,9 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 
 ## Open Questions
 
-- [ ] `ConfigError` is defined but never thrown — `Keychain.write` throws an ad-hoc `NSError` (with a misleading hardcoded message, "Unable to save API key"). Should the library standardize on `ConfigError`?
-- [ ] `SecureConfigItem.description` uses `try!`, so a Keychain read failure crashes when merely printing the item; `ConfigItem.read()` force-unwraps `UserDefaults(suiteName:)`, which crashes on an invalid suite name (e.g. the empty string).
+- [ ] `Keychain.write` still throws an ad-hoc `NSError` (with a misleading hardcoded message, "Unable to save API key") instead of `ConfigError`, which `ConfigItem` now uses. Should the library standardize on `ConfigError` throughout?
 - [ ] `Keychain.read` swallows all error statuses, returning `nil` for both "not found" and genuine failures (e.g. `errSecInteractionNotAllowed`), despite being marked `throws`.
-- [ ] The redaction in `description` shows 12 characters regardless of secret length — a short secret could be fully exposed.
-- [ ] The test suite is an empty placeholder; there is no coverage of either backend.
+- [ ] There is no test coverage of either storage backend (the redaction logic is tested).
 
 ---
 
@@ -87,3 +85,5 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 | Date | Change |
 |------|--------|
 | 2026-07-03 | Initial document generated from codebase |
+| 2026-07-03 | Length-aware redaction in `SecureConfigItem` (resolves former open question) |
+| 2026-07-03 | Removed crash paths: `ConfigItem` throws `ConfigError` on invalid suite; `description` renders read failures instead of `try!` |

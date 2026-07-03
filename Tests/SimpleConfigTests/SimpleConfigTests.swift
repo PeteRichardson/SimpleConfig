@@ -1,6 +1,84 @@
+import Foundation
 import Testing
 @testable import SimpleConfig
 
-@Test func example() async throws {
-    // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+@Suite("SecureConfigItem redaction")
+struct RedactionTests {
+    let mask = String(repeating: ".", count: 20)
+
+    @Test("secrets shorter than 5 characters are completely redacted")
+    func shortSecretsFullyRedacted() {
+        for secret in ["", "a", "ab", "abc", "abcd"] {
+            #expect(SecureConfigItem.redact(secret) == mask)
+        }
+    }
+
+    @Test("5-character secret shows one character on each side")
+    func fiveCharacterSecret() {
+        #expect(SecureConfigItem.redact("abcde") == "a\(mask)e")
+    }
+
+    @Test("10-character secret shows three characters on each side")
+    func tenCharacterSecret() {
+        #expect(SecureConfigItem.redact("0123456789") == "012\(mask)789")
+    }
+
+    @Test("long secrets show at most six characters on each side")
+    func longSecret() {
+        #expect(SecureConfigItem.redact("0123456789abcdefghij") == "012345\(mask)efghij")
+    }
+
+    @Test("at least three characters are always hidden")
+    func atLeastThreeCharactersHidden() {
+        for length in 5...30 {
+            let secret = String(repeating: "x", count: length)
+            let visibleCount = SecureConfigItem.redact(secret).count - mask.count
+            #expect(length - visibleCount >= 3, "length \(length) hides only \(length - visibleCount)")
+        }
+    }
+}
+
+@Suite("SecureConfigItem description")
+struct DescriptionTests {
+    @Test("a failed read renders as unreadable instead of crashing")
+    func failedRead() {
+        struct FakeError: Error {}
+        let output = SecureConfigItem.describe(key: "token", result: .failure(FakeError()))
+        #expect(output.hasPrefix("token = (unreadable:"))
+    }
+
+    @Test("a missing value renders as not set")
+    func missingValue() {
+        #expect(SecureConfigItem.describe(key: "token", result: .success(nil)) == "token = (not set)")
+    }
+
+    @Test("a present value is redacted")
+    func presentValue() {
+        let output = SecureConfigItem.describe(key: "token", result: .success("0123456789"))
+        #expect(output == "token = 012....................789")
+    }
+}
+
+@Suite("ConfigItem invalid suite handling")
+struct InvalidSuiteTests {
+    @Test("reading from a reserved suite name throws instead of crashing")
+    func readThrows() {
+        let item = ConfigItem(suiteName: UserDefaults.globalDomain, key: "anything")
+        #expect(throws: ConfigError.self) { try item.read() }
+    }
+
+    @Test("writing to a reserved suite name throws instead of crashing")
+    func writeThrows() {
+        let item = ConfigItem(suiteName: UserDefaults.globalDomain, key: "anything")
+        #expect(throws: ConfigError.self) { try item.write("value") }
+    }
+
+    @Test("round-trip through a valid suite still works")
+    func roundTrip() throws {
+        let suiteName = "com.peterichardson.SimpleConfigTests"
+        let item = ConfigItem(suiteName: suiteName, key: "greeting")
+        try item.write("hello")
+        #expect(try item.read() == "hello")
+        UserDefaults(suiteName: suiteName)?.removeObject(forKey: "greeting")
+    }
 }

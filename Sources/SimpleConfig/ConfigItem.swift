@@ -14,15 +14,21 @@ public struct ConfigItem: ConfigStorable {
         "\(key) = \((try? read()) ?? "(not set)")"
     }
 
+    private var defaults: UserDefaults {
+        get throws {
+            guard let defaults = UserDefaults(suiteName: suiteName) else {
+                throw ConfigError.unableToLoad(reason: "invalid UserDefaults suite name: \(suiteName)")
+            }
+            return defaults
+        }
+    }
+
     public func read() throws -> String? {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        let result = defaults.string(forKey: key)
-        return result
+        try defaults.string(forKey: key)
     }
 
     public func write(_ value: String) throws {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        return defaults.set(value, forKey: key)
+        try defaults.set(value, forKey: key)
     }
 
     public init(suiteName: String, key: String) {
@@ -40,8 +46,29 @@ public struct SecureConfigItem: ConfigStorable {
     }
 
     public var description: String {
-        let value = try! read() ?? "(not set)"
-        return "\(key) = \(String(value.prefix(6)))....................\(String(value.suffix(6)))"
+        Self.describe(key: key, result: Result { try read() })
+    }
+
+    /// `description` can't propagate errors (`CustomStringConvertible`
+    /// requires a non-throwing property), so a failed read is reported
+    /// inline rather than crashing the caller.
+    static func describe(key: String, result: Result<String?, Error>) -> String {
+        switch result {
+        case .success(let value?): "\(key) = \(redact(value))"
+        case .success(nil): "\(key) = (not set)"
+        case .failure(let error): "\(key) = (unreadable: \(error))"
+        }
+    }
+
+    /// Masks a secret with a fixed-width run of dots so output doesn't leak
+    /// its length. Secrets shorter than 5 characters are hidden entirely;
+    /// otherwise at most 6 characters show on each side, capped so that at
+    /// least 3 characters remain hidden.
+    static func redact(_ value: String) -> String {
+        let mask = String(repeating: ".", count: 20)
+        guard value.count >= 5 else { return mask }
+        let visible = min(6, (value.count - 3) / 2)
+        return "\(value.prefix(visible))\(mask)\(value.suffix(visible))"
     }
 
     public func write(_ value: String) throws {
