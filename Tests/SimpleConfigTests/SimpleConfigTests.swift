@@ -108,3 +108,26 @@ struct ConfigItemDeleteTests {
         #expect(throws: ConfigError.self) { try item.delete() }
     }
 }
+
+@Suite("SecureConfigItem delete")
+struct SecureConfigItemDeleteTests {
+    @Test("deleting a non-existent keychain item succeeds silently")
+    func deleteMissingItemSucceeds() throws {
+        let item = SecureConfigItem(
+            service: "com.peterichardson.SimpleConfigTests",
+            key: "never-written"
+        )
+        try item.delete()
+    }
+
+    @Test("write then delete removes the secret")
+    func writeDeleteRoundTrip() throws {
+        let item = SecureConfigItem(
+            service: "com.peterichardson.SimpleConfigTests",
+            key: "doomed"
+        )
+        try item.write("secret")
+        try item.delete()
+        #expect(try item.read() == nil)
+    }
+}

@@ -122,6 +122,14 @@ public struct SecureConfigItem: ConfigStorable {
         try Keychain.write(value, for: key, service: service)
     }
 
+    /// Ensures no secret is stored for `key`. Deleting a secret that
+    /// does not exist succeeds silently.
+    ///
+    /// - Throws: An error if the Keychain rejects the delete.
+    public func delete() throws {
+        try Keychain.delete(key, service: service)
+    }
+
     /// Creates an item backed by the Keychain.
     ///
     /// - Parameters:

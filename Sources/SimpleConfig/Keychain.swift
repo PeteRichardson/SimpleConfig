@@ -64,4 +64,22 @@ enum Keychain {
         }
         return nil
     }
+
+    /// Removes the generic-password item for the service/account pair.
+    /// Deleting an item that does not exist is not an error — delete
+    /// means "ensure absent".
+    static func delete(_ key: String, service: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw NSError(
+                domain: "Keychain", code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Unable to delete keychain item"])
+        }
+    }
 }
