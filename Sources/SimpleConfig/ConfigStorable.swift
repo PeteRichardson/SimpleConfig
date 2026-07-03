@@ -17,6 +17,9 @@ public protocol ConfigStorable: Comparable, CustomStringConvertible {
     func read() throws -> String?
     /// Stores a value, replacing any existing one.
     func write(_ value: String) throws
+    /// Ensures no value is stored for `key`. Deleting a value that
+    /// does not exist succeeds silently.
+    func delete() throws
     var description: String { get }
 }
 
