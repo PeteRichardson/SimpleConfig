@@ -1,0 +1,89 @@
+# SimpleConfig — Design Document
+
+*Last updated: 2026-07-03*
+
+---
+
+## Overview
+
+SimpleConfig is a small Swift package that gives applications a uniform way to read and write string key-value configuration on Apple platforms, with a choice of backend per item: `UserDefaults` for ordinary settings, or the Keychain for secrets such as API keys. It exists so that consuming apps can treat plain and sensitive configuration identically at the call site, without touching the Security framework directly.
+
+## Goals and Non-Goals
+
+**Goals:**
+- A single, minimal abstraction (`ConfigStorable`) over both plain and secure storage
+- Zero external dependencies — Foundation and Security only
+- Safe display of secrets (redacted `description` for Keychain-backed items)
+
+**Non-Goals:**
+- Typed values — everything is a `String`; encoding richer types is the caller's job
+- Configuration file parsing (JSON, plist, TOML, etc.)
+- Cross-platform (non-Apple) support — both backends are Apple OS services
+
+---
+
+## Architecture
+
+The package is a single library target with four source files, organized around one protocol and two conforming value types.
+
+`ConfigStorable` is the core abstraction: a `key` plus throwing `read() -> String?` and `write(_ value: String)`. It also requires `Comparable` and `CustomStringConvertible`, and a protocol extension supplies defaults for both — items sort by key, and the default `description` renders `key = value` (or `(not set)`). This lets a consuming app hold a heterogeneous collection of config items, sort them, and print them without caring which backend each one uses.
+
+### Components
+
+**ConfigItem** (`Sources/SimpleConfig/ConfigItem.swift`)
+The plain-storage implementation. Each item carries a `suiteName` and a `key`, and reads/writes through `UserDefaults(suiteName:)`. The suite name is caller-supplied, so multiple apps or tools can share (or isolate) their settings domains.
+
+**SecureConfigItem** (`Sources/SimpleConfig/ConfigItem.swift`)
+The secret-storage implementation. Each item carries a `service` and a `key`, mapping onto the Keychain's generic-password service/account model. Its `description` overrides the protocol default to redact the value, showing only the first and last six characters — secrets can appear in logs or listings without being fully exposed. The service name was originally hardcoded and is now passed in by the caller (see Key Design Decisions).
+
+**Keychain** (`Sources/SimpleConfig/Keychain.swift`)
+An internal enum wrapping the Security framework's C-style API (`SecItemAdd`, `SecItemCopyMatching`, `SecItemDelete`) for generic-password items. Writes use delete-then-add rather than update, which keeps the code simple at the cost of briefly removing the item. Items are stored with `kSecAttrAccessibleAfterFirstUnlock` so background processes can read them after a reboot once the device has been unlocked. This type is deliberately not public — consumers go through `SecureConfigItem`.
+
+**ConfigError** (`Sources/SimpleConfig/ConfigError.swift`)
+A public error enum (`unableToLoad`, `unknown`) intended as the library's error surface. It is currently unreferenced — `Keychain` throws raw `NSError` instead (see Open Questions).
+
+### Data Flow
+
+When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query, asks the Keychain for one result as `Data`, and decodes it as UTF-8, returning `nil` if the item doesn't exist. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, which never fails — its `throws` annotations exist only to satisfy the shared protocol.
+
+---
+
+## Key Design Decisions
+
+**Protocol-based backend selection.** Rather than one config type with a mode flag, each backend is its own struct conforming to `ConfigStorable`. The caller decides sensitivity item-by-item at construction time, and everything downstream (display, sorting, read/write) is uniform.
+
+**Caller-supplied namespaces.** Both the `UserDefaults` suite name and the Keychain service name are constructor parameters rather than constants baked into the library (the service name was hardcoded until commit `5015c76`). This keeps the package reusable across apps and lets one app partition its configuration.
+
+**Redaction over omission.** `SecureConfigItem.description` shows the first and last six characters of a secret rather than hiding it entirely — enough to confirm which key is stored without revealing it.
+
+No ADRs exist yet; the rationale above is inferred from the code and git history.
+
+---
+
+## External Dependencies
+
+None beyond the platform. The package uses only Foundation (`UserDefaults`) and Security (Keychain); `Package.swift` declares no external packages.
+
+---
+
+## Configuration and Environment
+
+Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple platform (the Keychain and `UserDefaults` backends need macOS/iOS). Build with `swift build`, test with `swift test`; tests use the Swift Testing framework (`@Test` / `#expect`), not XCTest.
+
+---
+
+## Open Questions
+
+- [ ] `ConfigError` is defined but never thrown — `Keychain.write` throws an ad-hoc `NSError` (with a misleading hardcoded message, "Unable to save API key"). Should the library standardize on `ConfigError`?
+- [ ] `SecureConfigItem.description` uses `try!`, so a Keychain read failure crashes when merely printing the item; `ConfigItem.read()` force-unwraps `UserDefaults(suiteName:)`, which crashes on an invalid suite name (e.g. the empty string).
+- [ ] `Keychain.read` swallows all error statuses, returning `nil` for both "not found" and genuine failures (e.g. `errSecInteractionNotAllowed`), despite being marked `throws`.
+- [ ] The redaction in `description` shows 12 characters regardless of secret length — a short secret could be fully exposed.
+- [ ] The test suite is an empty placeholder; there is no coverage of either backend.
+
+---
+
+## Document History
+
+| Date | Change |
+|------|--------|
+| 2026-07-03 | Initial document generated from codebase |
