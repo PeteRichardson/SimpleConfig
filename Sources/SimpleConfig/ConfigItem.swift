@@ -50,6 +50,14 @@ public struct ConfigItem: ConfigStorable {
         try defaults.set(value, forKey: key)
     }
 
+    /// Ensures no value is stored for `key`. Deleting a value that
+    /// does not exist succeeds silently.
+    ///
+    /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
+    public func delete() throws {
+        try defaults.removeObject(forKey: key)
+    }
+
     /// Creates an item backed by the given `UserDefaults` suite.
     ///
     /// - Parameters:

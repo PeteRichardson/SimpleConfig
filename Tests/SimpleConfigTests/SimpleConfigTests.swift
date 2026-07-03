@@ -82,3 +82,29 @@ struct InvalidSuiteTests {
         UserDefaults(suiteName: suiteName)?.removeObject(forKey: "greeting")
     }
 }
+
+@Suite("ConfigItem delete")
+struct ConfigItemDeleteTests {
+    let suiteName = "com.peterichardson.SimpleConfigTests"
+
+    @Test("deleting a written value removes it")
+    func deleteRemovesValue() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "doomed")
+        try item.write("value")
+        try item.delete()
+        #expect(try item.read() == nil)
+    }
+
+    @Test("deleting a never-written value succeeds silently")
+    func deleteMissingValueSucceeds() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "never-written")
+        try item.delete()
+        #expect(try item.read() == nil)
+    }
+
+    @Test("deleting from a reserved suite name throws instead of crashing")
+    func deleteThrowsOnReservedSuite() {
+        let item = ConfigItem(suiteName: UserDefaults.globalDomain, key: "anything")
+        #expect(throws: ConfigError.self) { try item.delete() }
+    }
+}
