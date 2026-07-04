@@ -131,3 +131,46 @@ struct SecureConfigItemDeleteTests {
         #expect(try item.read() == nil)
     }
 }
+
+@Suite("ConfigItem enumeration")
+struct ConfigItemEnumerationTests {
+    @Test("items(inSuite:) returns all written items sorted by key")
+    func itemsReturnsAllSorted() throws {
+        let suiteName = "com.peterichardson.SimpleConfigTests.enum-sorted"
+        let keys = ["banana", "apple", "cherry"]
+        for key in keys {
+            try ConfigItem(suiteName: suiteName, key: key).write("value-\(key)")
+        }
+        defer {
+            for key in keys { try? ConfigItem(suiteName: suiteName, key: key).delete() }
+        }
+
+        let items = try ConfigItem.items(inSuite: suiteName)
+        #expect(items.map { $0.key } == ["apple", "banana", "cherry"])
+    }
+
+    @Test("an unused suite returns an empty array")
+    func unusedSuiteIsEmpty() throws {
+        let items = try ConfigItem.items(inSuite: "com.peterichardson.SimpleConfigTests.enum-never-used")
+        #expect(items.isEmpty)
+    }
+
+    @Test("a reserved suite name throws")
+    func reservedSuiteThrows() {
+        #expect(throws: ConfigError.self) {
+            try ConfigItem.items(inSuite: UserDefaults.globalDomain)
+        }
+    }
+
+    @Test("non-string values are enumerated but read as nil")
+    func nonStringValueEnumerated() throws {
+        let suiteName = "com.peterichardson.SimpleConfigTests.enum-blob"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(Data([0xFF]), forKey: "blob")
+        defer { defaults.removeObject(forKey: "blob") }
+
+        let items = try ConfigItem.items(inSuite: suiteName)
+        let blob = try #require(items.first { $0.key == "blob" })
+        #expect(try blob.read() == nil)
+    }
+}

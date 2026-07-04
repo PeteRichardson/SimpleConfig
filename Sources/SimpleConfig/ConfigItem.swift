@@ -23,15 +23,17 @@ public struct ConfigItem: ConfigStorable {
     }
 
     /// `UserDefaults(suiteName:)` returns `nil` for reserved names rather
-    /// than failing loudly; resolving it lazily per access lets `read`/`write`
-    /// surface that as a thrown error instead of a force-unwrap crash.
-    private var defaults: UserDefaults {
-        get throws {
-            guard let defaults = UserDefaults(suiteName: suiteName) else {
-                throw ConfigError.unableToLoad(reason: "invalid UserDefaults suite name: \(suiteName)")
-            }
-            return defaults
+    /// than failing loudly; validating here lets callers surface that as a
+    /// thrown error instead of a force-unwrap crash.
+    private static func suite(named suiteName: String) throws -> UserDefaults {
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw ConfigError.unableToLoad(reason: "invalid UserDefaults suite name: \(suiteName)")
         }
+        return defaults
+    }
+
+    private var defaults: UserDefaults {
+        get throws { try Self.suite(named: suiteName) }
     }
 
     /// Reads the current value from the suite.
@@ -56,6 +58,21 @@ public struct ConfigItem: ConfigStorable {
     /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
     public func delete() throws {
         try defaults.removeObject(forKey: key)
+    }
+
+    /// All items stored in the given `UserDefaults` suite, sorted by key.
+    /// Every key in the suite is included regardless of its value's type
+    /// (enumeration is type-blind); an unused suite returns an empty array.
+    ///
+    /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
+    public static func items(inSuite suiteName: String) throws -> [ConfigItem] {
+        _ = try suite(named: suiteName)
+        // persistentDomain, not dictionaryRepresentation(): the latter
+        // merges in NSGlobalDomain and the rest of the search list.
+        let domain = UserDefaults.standard.persistentDomain(forName: suiteName) ?? [:]
+        return domain.keys
+            .map { ConfigItem(suiteName: suiteName, key: $0) }
+            .sorted()
     }
 
     /// Creates an item backed by the given `UserDefaults` suite.
