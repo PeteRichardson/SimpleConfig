@@ -100,6 +100,8 @@ public struct SecureConfigItem: ConfigStorable {
     /// Reads the secret from the Keychain.
     ///
     /// - Returns: The stored secret, or `nil` if none exists.
+    /// - Throws: An error if the Keychain read fails for a reason other
+    ///   than the secret being absent.
     public func read() throws -> String? {
         try Keychain.read(key, service: service)
     }

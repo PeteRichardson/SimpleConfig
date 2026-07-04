@@ -40,10 +40,24 @@ enum Keychain {
         }
     }
 
-    /// Returns the stored secret for the service/account pair, or `nil` if
-    /// there is none. Caution: any non-success status is also reported as
-    /// `nil`, so a genuine failure (e.g. `errSecInteractionNotAllowed` while
-    /// the device is locked) is indistinguishable from a missing item.
+    /// `true` if `status` is `errSecSuccess`, `false` if
+    /// `errSecItemNotFound`; throws for any other status.
+    ///
+    /// - Throws: `NSError(domain: "Keychain")` for a genuine failure status.
+    static func isPresent(_ status: OSStatus) throws -> Bool {
+        if status == errSecSuccess { return true }
+        if status == errSecItemNotFound { return false }
+        throw NSError(
+            domain: "Keychain", code: Int(status),
+            userInfo: [NSLocalizedDescriptionKey: "Unable to read keychain item"])
+    }
+
+    /// Returns the stored secret for the service/account pair, or `nil`
+    /// if there is none, or if the stored bytes aren't valid UTF-8.
+    ///
+    /// - Throws: An error for a genuine Keychain failure (e.g.
+    ///   `errSecInteractionNotAllowed` while the device is locked) —
+    ///   distinct from "not found", which returns `nil`.
     static func read(_ key: String, service: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -54,15 +68,11 @@ enum Keychain {
         ]
 
         var result: AnyObject?
-
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        if status == errSecSuccess {
-            if let data = result as? Data {
-                return String(data: data, encoding: .utf8)
-            }
-        }
-        return nil
+        guard try isPresent(status) else { return nil }
+        guard let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// Removes the generic-password item for the service/account pair.

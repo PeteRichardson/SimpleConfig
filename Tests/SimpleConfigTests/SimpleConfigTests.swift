@@ -239,3 +239,46 @@ struct KeyValuePairsTests {
         #expect(throws: ConfigError.self) { try items.keyValuePairs() }
     }
 }
+
+@Suite("Keychain.isPresent")
+struct KeychainIsPresentTests {
+    @Test("errSecSuccess is present")
+    func successIsPresent() throws {
+        #expect(try Keychain.isPresent(errSecSuccess) == true)
+    }
+
+    @Test("errSecItemNotFound is not present")
+    func notFoundIsNotPresent() throws {
+        #expect(try Keychain.isPresent(errSecItemNotFound) == false)
+    }
+
+    @Test("any other status throws")
+    func otherStatusThrows() {
+        #expect(throws: NSError.self) {
+            try Keychain.isPresent(errSecAuthFailed)
+        }
+    }
+}
+
+@Suite("Keychain.read error handling")
+struct KeychainReadErrorTests {
+    @Test("a never-written key returns nil without throwing")
+    func neverWrittenReturnsNil() throws {
+        let item = SecureConfigItem(
+            service: "com.peterichardson.SimpleConfigTests.read-errors",
+            key: "never-written"
+        )
+        #expect(try item.read() == nil)
+    }
+
+    @Test("a written key still reads back correctly")
+    func writtenKeyReadsBack() throws {
+        let item = SecureConfigItem(
+            service: "com.peterichardson.SimpleConfigTests.read-errors",
+            key: "present"
+        )
+        try item.write("hello")
+        defer { try? item.delete() }
+        #expect(try item.read() == "hello")
+    }
+}
