@@ -82,4 +82,29 @@ enum Keychain {
                 userInfo: [NSLocalizedDescriptionKey: "Unable to delete keychain item"])
         }
     }
+
+    /// All account names stored under the given service, unsorted.
+    /// Values are never read (`kSecReturnAttributes`, not
+    /// `kSecReturnData`), so listing is cheap and safe. An unused
+    /// service returns an empty array rather than an error.
+    static func accounts(service: String) throws -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess else {
+            throw NSError(
+                domain: "Keychain", code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Unable to list keychain items"])
+        }
+        let attributes = result as? [[String: Any]] ?? []
+        return attributes.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
 }

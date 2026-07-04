@@ -147,6 +147,15 @@ public struct SecureConfigItem: ConfigStorable {
         try Keychain.delete(key, service: service)
     }
 
+    /// All items stored under the given Keychain service, sorted by key.
+    /// Secret values are never read — the results are safe to display
+    /// (printing an item shows the redacted form).
+    public static func items(inService service: String) throws -> [SecureConfigItem] {
+        try Keychain.accounts(service: service)
+            .map { SecureConfigItem(service: service, key: $0) }
+            .sorted()
+    }
+
     /// Creates an item backed by the Keychain.
     ///
     /// - Parameters:

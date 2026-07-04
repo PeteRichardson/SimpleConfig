@@ -174,3 +174,28 @@ struct ConfigItemEnumerationTests {
         #expect(try blob.read() == nil)
     }
 }
+
+@Suite("SecureConfigItem enumeration")
+struct SecureConfigItemEnumerationTests {
+    @Test("items(inService:) returns all written items sorted by key")
+    func itemsReturnsAllSorted() throws {
+        let service = "com.peterichardson.SimpleConfigTests.enum-service"
+        let beta = SecureConfigItem(service: service, key: "beta")
+        let alpha = SecureConfigItem(service: service, key: "alpha")
+        try beta.write("secret-b")
+        try alpha.write("secret-a")
+        defer {
+            try? beta.delete()
+            try? alpha.delete()
+        }
+
+        let items = try SecureConfigItem.items(inService: service)
+        #expect(items.map { $0.key } == ["alpha", "beta"])
+    }
+
+    @Test("an unused service returns an empty array")
+    func unusedServiceIsEmpty() throws {
+        let items = try SecureConfigItem.items(inService: "com.peterichardson.SimpleConfigTests.enum-never-used")
+        #expect(items.isEmpty)
+    }
+}
