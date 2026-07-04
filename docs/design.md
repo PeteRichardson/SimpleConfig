@@ -37,14 +37,14 @@ The plain-storage implementation. Each item carries a `suiteName` and a `key`, a
 The secret-storage implementation. Each item carries a `service` and a `key`, mapping onto the Keychain's generic-password service/account model. Its `description` overrides the protocol default to redact the value, showing only the first and last six characters — secrets can appear in logs or listings without being fully exposed. The service name was originally hardcoded and is now passed in by the caller (see Key Design Decisions).
 
 **Keychain** (`Sources/SimpleConfig/Keychain.swift`)
-An internal enum wrapping the Security framework's C-style API (`SecItemAdd`, `SecItemCopyMatching`, `SecItemDelete`) for generic-password items. Writes use delete-then-add rather than update, which keeps the code simple at the cost of briefly removing the item. Items are stored with `kSecAttrAccessibleAfterFirstUnlock` so background processes can read them after a reboot once the device has been unlocked. This type is deliberately not public — consumers go through `SecureConfigItem`.
+An internal enum wrapping the Security framework's C-style API (`SecItemAdd`, `SecItemCopyMatching`, `SecItemDelete`) for generic-password items. Writes use delete-then-add rather than update, which keeps the code simple at the cost of briefly removing the item. Items are stored with `kSecAttrAccessibleAfterFirstUnlock` so background processes can read them after a reboot once the device has been unlocked. `read` distinguishes three outcomes: a successful fetch, an absent item (`errSecItemNotFound`), and a genuine failure — the first two return the decoded string or `nil` respectively, the third throws, via the internal `isPresent` helper. This type is deliberately not public — consumers go through `SecureConfigItem`.
 
 **ConfigError** (`Sources/SimpleConfig/ConfigError.swift`)
 A public error enum (`unableToLoad`, `unknown`) intended as the library's error surface. `ConfigItem` throws `.unableToLoad` when its `UserDefaults` suite can't be created (e.g. a reserved name like `NSGlobalDomain`); `Keychain` still throws raw `NSError` instead (see Open Questions).
 
 ### Data Flow
 
-When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query, asks the Keychain for one result as `Data`, and decodes it as UTF-8, returning `nil` if the item doesn't exist. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, throwing `ConfigError.unableToLoad` if the suite name is invalid (e.g. `NSGlobalDomain` or the app's own bundle identifier); once the suite resolves, reads and writes themselves cannot fail.
+When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query and asks the Keychain for one result as `Data`; `errSecItemNotFound` and a successful-but-non-UTF8 decode both return `nil`, while any other non-success status throws. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, throwing `ConfigError.unableToLoad` if the suite name is invalid (e.g. `NSGlobalDomain` or the app's own bundle identifier); once the suite resolves, reads and writes themselves cannot fail.
 
 A `delete()` is idempotent on both paths: `ConfigItem` calls `removeObject(forKey:)` (a no-op for missing keys) and `SecureConfigItem` calls `SecItemDelete`, treating `errSecItemNotFound` as success.
 
@@ -79,7 +79,6 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 ## Open Questions
 
 - [ ] `Keychain.write` still throws an ad-hoc `NSError` (with a misleading hardcoded message, "Unable to save API key") instead of `ConfigError`, which `ConfigItem` now uses. Should the library standardize on `ConfigError` throughout?
-- [ ] `Keychain.read` swallows all error statuses, returning `nil` for both "not found" and genuine failures (e.g. `errSecInteractionNotAllowed`), despite being marked `throws`.
 - [ ] There is no test coverage of either storage backend (the redaction logic is tested).
 
 ---
@@ -93,3 +92,4 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 | 2026-07-03 | Removed crash paths: `ConfigItem` throws `ConfigError` on invalid suite; `description` renders read failures instead of `try!` |
 | 2026-07-03 | Added idempotent `delete()` to `ConfigStorable` and both conformers |
 | 2026-07-03 | Added enumeration (`items(inSuite:)`, `items(inService:)`, `Keychain.accounts`) and `keyValuePairs()` |
+| 2026-07-03 | `Keychain.read` throws for genuine failures instead of collapsing them to `nil` (resolves former open question) |
