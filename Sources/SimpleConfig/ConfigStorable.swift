@@ -37,3 +37,24 @@ extension ConfigStorable {
         lhs.key < rhs.key
     }
 }
+
+extension Sequence where Element: ConfigStorable {
+    /// The string view of these items: each item's key paired with its
+    /// current value, in this sequence's order. Items whose value reads
+    /// as `nil` (deleted since enumeration, or not representable as a
+    /// string — e.g. a non-string `UserDefaults` value) are dropped.
+    /// Reading a `SecureConfigItem` sequence materializes every secret
+    /// in plaintext — call deliberately.
+    ///
+    /// Available on homogeneous sequences (`[ConfigItem]`,
+    /// `[SecureConfigItem]`); Swift existentials don't conform to their
+    /// own protocols, so a mixed `[any ConfigStorable]` needs a manual map.
+    ///
+    /// - Throws: The first error any item's `read()` throws.
+    public func keyValuePairs() throws -> [(key: String, value: String)] {
+        try compactMap { item in
+            guard let value = try item.read() else { return nil }
+            return (key: item.key, value: value)
+        }
+    }
+}

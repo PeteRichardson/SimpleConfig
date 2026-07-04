@@ -199,3 +199,43 @@ struct SecureConfigItemEnumerationTests {
         #expect(items.isEmpty)
     }
 }
+
+@Suite("keyValuePairs")
+struct KeyValuePairsTests {
+    @Test("pairs match written keys and values in sorted order")
+    func pairsMatch() throws {
+        let suiteName = "com.peterichardson.SimpleConfigTests.pairs-match"
+        try ConfigItem(suiteName: suiteName, key: "two").write("2")
+        try ConfigItem(suiteName: suiteName, key: "one").write("1")
+        defer {
+            try? ConfigItem(suiteName: suiteName, key: "one").delete()
+            try? ConfigItem(suiteName: suiteName, key: "two").delete()
+        }
+
+        let pairs = try ConfigItem.items(inSuite: suiteName).keyValuePairs()
+        #expect(pairs.map { $0.key } == ["one", "two"])
+        #expect(pairs.map { $0.value } == ["1", "2"])
+    }
+
+    @Test("values that read as nil are dropped")
+    func nilValuesDropped() throws {
+        let suiteName = "com.peterichardson.SimpleConfigTests.pairs-nil"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(Data([0xFF]), forKey: "blob")
+        try ConfigItem(suiteName: suiteName, key: "text").write("hello")
+        defer {
+            defaults.removeObject(forKey: "blob")
+            try? ConfigItem(suiteName: suiteName, key: "text").delete()
+        }
+
+        let pairs = try ConfigItem.items(inSuite: suiteName).keyValuePairs()
+        #expect(pairs.map { $0.key } == ["text"])
+        #expect(pairs.map { $0.value } == ["hello"])
+    }
+
+    @Test("a read error propagates")
+    func readErrorPropagates() {
+        let items = [ConfigItem(suiteName: UserDefaults.globalDomain, key: "anything")]
+        #expect(throws: ConfigError.self) { try items.keyValuePairs() }
+    }
+}
