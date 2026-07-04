@@ -57,6 +57,29 @@ struct DescriptionTests {
         let output = SecureConfigItem.describe(key: "token", result: .success("0123456789"))
         #expect(output == "token = 012....................789")
     }
+
+    @Test("a byte count renders as a binary value when the result is nil")
+    func binaryValue() {
+        let output = SecureConfigItem.describe(key: "token", result: .success(nil), dataByteCount: 3)
+        #expect(output == "token = (binary value, 3 bytes)")
+    }
+
+    @Test("dataByteCount is not evaluated when a string value is present")
+    func dataByteCountNotEvaluatedForPresentValue() {
+        var callCount = 0
+        func count() -> Int? { callCount += 1; return 99 }
+        _ = SecureConfigItem.describe(key: "token", result: .success("value"), dataByteCount: count())
+        #expect(callCount == 0)
+    }
+
+    @Test("dataByteCount is not evaluated on failure")
+    func dataByteCountNotEvaluatedForFailure() {
+        struct FakeError: Error {}
+        var callCount = 0
+        func count() -> Int? { callCount += 1; return 99 }
+        _ = SecureConfigItem.describe(key: "token", result: .failure(FakeError()), dataByteCount: count())
+        #expect(callCount == 0)
+    }
 }
 
 @Suite("ConfigItem invalid suite handling")

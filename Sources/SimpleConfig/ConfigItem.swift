@@ -141,19 +141,33 @@ public struct SecureConfigItem: ConfigStorable {
         try Keychain.read(key, service: service)
     }
 
-    /// Renders as `key = <redacted value>` — never the full secret.
+    /// Renders as `key = <redacted value>` — never the full secret. A
+    /// value stored only as `Data` renders as its byte count instead of
+    /// the (misleading) `(not set)`.
     public var description: String {
-        Self.describe(key: key, result: Result { try read() })
+        Self.describe(
+            key: key,
+            result: Result { try read() },
+            dataByteCount: (try? readData())?.count
+        )
     }
 
     /// `description` can't propagate errors (`CustomStringConvertible`
     /// requires a non-throwing property), so a failed read is reported
-    /// inline rather than crashing the caller.
-    static func describe(key: String, result: Result<String?, Error>) -> String {
+    /// inline rather than crashing the caller. `dataByteCount` is
+    /// `@autoclosure` so a normal string-valued secret never pays for a
+    /// second Keychain round-trip — it's only evaluated when the string
+    /// result comes back `nil`.
+    static func describe(
+        key: String, result: Result<String?, Error>,
+        dataByteCount: @autoclosure () -> Int? = nil
+    ) -> String {
         switch result {
-        case .success(let value?): "\(key) = \(redact(value))"
-        case .success(nil): "\(key) = (not set)"
-        case .failure(let error): "\(key) = (unreadable: \(error))"
+        case .success(let value?): return "\(key) = \(redact(value))"
+        case .success(nil):
+            if let count = dataByteCount() { return "\(key) = (binary value, \(count) bytes)" }
+            return "\(key) = (not set)"
+        case .failure(let error): return "\(key) = (unreadable: \(error))"
         }
     }
 
