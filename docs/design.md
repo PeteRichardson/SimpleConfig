@@ -26,7 +26,7 @@ SimpleConfig is a small Swift package that gives applications a uniform way to r
 
 The package is a single library target with four source files, organized around one protocol and two conforming value types.
 
-`ConfigStorable` is the core abstraction: a `key` plus throwing `read()`/`write(_:)`/`delete()`. The `delete()` operation is idempotent — deleting a missing value succeeds silently. It also requires `Comparable` and `CustomStringConvertible`, and a protocol extension supplies defaults for both — items sort by key, and the default `description` renders `key = value` (or `(not set)`). This lets a consuming app hold a heterogeneous collection of config items, sort them, and print them without caring which backend each one uses.
+`ConfigStorable` is the core abstraction: a `key` plus throwing `read()`/`write(_:)`/`delete()`. The `delete()` operation is idempotent — deleting a missing value succeeds silently. Static enumerators (`ConfigItem.items(inSuite:)`, `SecureConfigItem.items(inService:)`) list a namespace's items sorted by key, and a `Sequence` extension, `keyValuePairs()`, converts items to plain `(key, value)` tuples — the string view, which throws on read errors and drops values that don't read as strings. It also requires `Comparable` and `CustomStringConvertible`, and a protocol extension supplies defaults for both — items sort by key, and the default `description` renders `key = value` (or `(not set)`). This lets a consuming app hold a heterogeneous collection of config items, sort them, and print them without caring which backend each one uses.
 
 ### Components
 
@@ -47,6 +47,8 @@ A public error enum (`unableToLoad`, `unknown`) intended as the library's error 
 When an app calls `write("secret")` on a `SecureConfigItem`, the item forwards to `Keychain.write`, which builds a generic-password query from the item's service and key, deletes any existing entry, and adds the new one, throwing on any non-success status. A `read()` builds the matching query, asks the Keychain for one result as `Data`, and decodes it as UTF-8, returning `nil` if the item doesn't exist. The `ConfigItem` path is the same shape but delegates to `UserDefaults`, throwing `ConfigError.unableToLoad` if the suite name is invalid (e.g. `NSGlobalDomain` or the app's own bundle identifier); once the suite resolves, reads and writes themselves cannot fail.
 
 A `delete()` is idempotent on both paths: `ConfigItem` calls `removeObject(forKey:)` (a no-op for missing keys) and `SecureConfigItem` calls `SecItemDelete`, treating `errSecItemNotFound` as success.
+
+Enumeration never reads secret values: `SecureConfigItem.items(inService:)` asks the Keychain for attributes only (`kSecReturnAttributes`, via the internal `Keychain.accounts`), and `ConfigItem.items(inSuite:)` reads the suite's `persistentDomain(forName:)` — not `dictionaryRepresentation()`, which would merge in the global domain. Listing config is therefore safe to display; extracting plaintext requires an explicit chained `keyValuePairs()` call.
 
 ---
 
@@ -90,3 +92,4 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 | 2026-07-03 | Length-aware redaction in `SecureConfigItem` (resolves former open question) |
 | 2026-07-03 | Removed crash paths: `ConfigItem` throws `ConfigError` on invalid suite; `description` renders read failures instead of `try!` |
 | 2026-07-03 | Added idempotent `delete()` to `ConfigStorable` and both conformers |
+| 2026-07-03 | Added enumeration (`items(inSuite:)`, `items(inService:)`, `Keychain.accounts`) and `keyValuePairs()` |

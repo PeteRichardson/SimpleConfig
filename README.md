@@ -113,6 +113,20 @@ for item in items.sorted(by: <) {
 }
 ```
 
+Discover what a namespace contains — and, when you mean to, extract
+plain pairs:
+
+```swift
+// Enumerate without reading secret values
+for item in try SecureConfigItem.items(inService: "com.example.myapp") {
+    print(item)             // redacted, safe to log
+}
+
+// Explicitly materialize plain (key, value) tuples
+let pairs = try ConfigItem.items(inSuite: "com.example.myapp").keyValuePairs()
+// [(key: "host", value: "api.example.com")]
+```
+
 ---
 
 ## API
@@ -129,6 +143,8 @@ Every `ConfigStorable` provides:
 - `read() throws -> String?` — the stored value, or `nil` if not set
 - `write(_ value: String) throws` — store, replacing any existing value
 - `delete() throws` — ensure absent; deleting a missing value succeeds silently
+- `ConfigItem.items(inSuite:)` / `SecureConfigItem.items(inService:)` — all items in a namespace, sorted by key; secret values are never read
+- `keyValuePairs()` (on homogeneous item sequences) — plain `(key, value)` tuples; throws on read errors, drops values with no string form
 - `description` — `key = value` rendering; `SecureConfigItem` redacts the value
 - `Comparable` — items sort by `key`
 
@@ -146,7 +162,6 @@ Architecture details live in [docs/design.md](docs/design.md).
 - **Apple platforms only** — both backends are Apple OS services; there is no Linux/Windows fallback.
 - **Keychain reads collapse errors to `nil`** — a genuine failure (e.g. reading while the device is locked) is currently indistinguishable from "not set." Tracked as an open question in [docs/design.md](docs/design.md).
 - **Keychain writes are delete-then-add** — the item briefly doesn't exist during a rewrite; there's no atomic update.
-- **No enumeration yet** — you can't list all items in a suite/service; each item is addressed by its known key. (Planned as a future addition.)
 
 <!-- 🖊 TODO: Review — inferred from docs/design.md open questions and source. -->
 
