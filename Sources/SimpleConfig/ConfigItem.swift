@@ -17,7 +17,9 @@ public struct ConfigItem: ConfigStorable {
     public let key: String
 
     /// Renders as `key = value`. A value stored only as `Data` renders
-    /// as its byte count instead of the (misleading) `(not set)`.
+    /// as its byte count instead of the (misleading) `(not set)`; a
+    /// failed read — e.g. an invalid suite name — also renders as
+    /// `(not set)`, since `description` cannot throw.
     public var description: String {
         Self.describe(key: key, stringValue: try? read(), dataByteCount: (try? readData())?.count)
     }
