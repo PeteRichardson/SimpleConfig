@@ -11,12 +11,9 @@ import Security
 /// Deliberately not public — consumers go through `SecureConfigItem`.
 enum Keychain {
 
-    /// Stores `value` as a generic-password item, replacing any existing
+    /// Stores `data` as a generic-password item, replacing any existing
     /// item for the same service/account pair.
-    static func write(_ value: String, for key: String, service: String) throws {
-        // Force-unwrap is safe: every Swift String is representable as UTF-8.
-        let data = value.data(using: .utf8)!
-
+    static func write(_ data: Data, for key: String, service: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -40,6 +37,13 @@ enum Keychain {
         }
     }
 
+    /// Stores `value` as a generic-password item, replacing any existing
+    /// item for the same service/account pair.
+    static func write(_ value: String, for key: String, service: String) throws {
+        // Force-unwrap is safe: every Swift String is representable as UTF-8.
+        try write(value.data(using: .utf8)!, for: key, service: service)
+    }
+
     /// `true` if `status` is `errSecSuccess`, `false` if
     /// `errSecItemNotFound`; throws for any other status.
     ///
@@ -52,13 +56,13 @@ enum Keychain {
             userInfo: [NSLocalizedDescriptionKey: "Unable to read keychain item"])
     }
 
-    /// Returns the stored secret for the service/account pair, or `nil`
-    /// if there is none, or if the stored bytes aren't valid UTF-8.
+    /// Returns the stored bytes for the service/account pair, or `nil`
+    /// if there is none.
     ///
     /// - Throws: An error for a genuine Keychain failure (e.g.
     ///   `errSecInteractionNotAllowed` while the device is locked) —
     ///   distinct from "not found", which returns `nil`.
-    static func read(_ key: String, service: String) throws -> String? {
+    static func readData(_ key: String, service: String) throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -71,7 +75,17 @@ enum Keychain {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         guard try isPresent(status) else { return nil }
-        guard let data = result as? Data else { return nil }
+        return result as? Data
+    }
+
+    /// Returns the stored secret for the service/account pair, or `nil`
+    /// if there is none, or if the stored bytes aren't valid UTF-8.
+    ///
+    /// - Throws: An error for a genuine Keychain failure (e.g.
+    ///   `errSecInteractionNotAllowed` while the device is locked) —
+    ///   distinct from "not found", which returns `nil`.
+    static func read(_ key: String, service: String) throws -> String? {
+        guard let data = try readData(key, service: service) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 

@@ -325,6 +325,42 @@ struct ConfigItemDataTests {
     }
 }
 
+@Suite("SecureConfigItem Data values")
+struct SecureConfigItemDataTests {
+    let service = "com.peterichardson.SimpleConfigTests.data-values"
+
+    @Test("write(Data) then readData() round-trips the same bytes")
+    func dataRoundTrip() throws {
+        let item = SecureConfigItem(service: service, key: "blob")
+        let bytes = Data([0x01, 0x02, 0x03])
+        try item.write(bytes)
+        defer { try? item.delete() }
+        #expect(try item.readData() == bytes)
+    }
+
+    @Test("write(Data) with non-UTF8 bytes then read() returns nil")
+    func nonUTF8DataThenStringReadIsNil() throws {
+        let item = SecureConfigItem(service: service, key: "non-utf8")
+        try item.write(Data([0xFF, 0xFE]))
+        defer { try? item.delete() }
+        #expect(try item.read() == nil)
+    }
+
+    @Test("write(String) then readData() returns its UTF-8 bytes")
+    func stringThenDataReadSucceeds() throws {
+        let item = SecureConfigItem(service: service, key: "string-as-data")
+        try item.write("hello")
+        defer { try? item.delete() }
+        #expect(try item.readData() == "hello".data(using: .utf8))
+    }
+
+    @Test("readData() on a never-written key returns nil")
+    func readDataOnMissingItemIsNil() throws {
+        let item = SecureConfigItem(service: service, key: "never-written-blob")
+        #expect(try item.readData() == nil)
+    }
+}
+
 @Suite("ConfigItem description")
 struct ConfigItemDescriptionTests {
     @Test("a present string value renders directly")

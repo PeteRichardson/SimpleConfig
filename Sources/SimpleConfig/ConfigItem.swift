@@ -176,6 +176,26 @@ public struct SecureConfigItem: ConfigStorable {
         try Keychain.write(value, for: key, service: service)
     }
 
+    /// Reads the secret from the Keychain as raw bytes. Unlike
+    /// `ConfigItem`, the Keychain stores one blob of bytes with no type
+    /// tag, so this succeeds for any stored value — including one
+    /// written as a `String` (its UTF-8 bytes are returned).
+    ///
+    /// - Returns: The stored bytes, or `nil` if none exists.
+    public func readData() throws -> Data? {
+        try Keychain.readData(key, service: service)
+    }
+
+    /// Writes raw bytes to the Keychain, replacing any existing value.
+    /// `read()` will still succeed afterward if these bytes happen to
+    /// decode as valid UTF-8.
+    ///
+    /// - Parameter data: The bytes to store.
+    /// - Throws: An error if the Keychain rejects the write.
+    public func write(_ data: Data) throws {
+        try Keychain.write(data, for: key, service: service)
+    }
+
     /// Ensures no secret is stored for `key`. Deleting a secret that
     /// does not exist succeeds silently.
     ///
