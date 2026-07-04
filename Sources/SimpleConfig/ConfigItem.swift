@@ -16,10 +16,24 @@ public struct ConfigItem: ConfigStorable {
     /// The defaults key the value is stored under.
     public let key: String
 
-    /// Renders as `key = value`. A missing value — or a failed read,
-    /// since `description` cannot throw — renders as `(not set)`.
+    /// Renders as `key = value`. A value stored only as `Data` renders
+    /// as its byte count instead of the (misleading) `(not set)`.
     public var description: String {
-        "\(key) = \((try? read()) ?? "(not set)")"
+        Self.describe(key: key, stringValue: try? read(), dataByteCount: (try? readData())?.count)
+    }
+
+    /// `description` can't propagate errors (`CustomStringConvertible`
+    /// requires a non-throwing property), so both read paths are
+    /// attempted with `try?`; a value present only as `Data` renders its
+    /// byte count instead of `(not set)`.
+    static func describe(key: String, stringValue: String?, dataByteCount: Int?) -> String {
+        if let stringValue {
+            return "\(key) = \(stringValue)"
+        }
+        if let dataByteCount {
+            return "\(key) = (binary value, \(dataByteCount) bytes)"
+        }
+        return "\(key) = (not set)"
     }
 
     /// `UserDefaults(suiteName:)` returns `nil` for reserved names rather
@@ -50,6 +64,27 @@ public struct ConfigItem: ConfigStorable {
     /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
     public func write(_ value: String) throws {
         try defaults.set(value, forKey: key)
+    }
+
+    /// Reads the current value from the suite as raw bytes. `UserDefaults`
+    /// stores `String` and `Data` as distinct property-list types per key,
+    /// so this only returns non-nil if the value was written with
+    /// `write(_ data: Data)` — not if it was written as a `String`.
+    ///
+    /// - Returns: The stored bytes, or `nil` if no `Data` value is set.
+    /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
+    public func readData() throws -> Data? {
+        try defaults.data(forKey: key)
+    }
+
+    /// Writes raw bytes to the suite, replacing any existing value.
+    /// Storing `Data` does not make `read()` succeed for the same key —
+    /// see `readData()`.
+    ///
+    /// - Parameter data: The bytes to store.
+    /// - Throws: `ConfigError.unableToLoad` if the suite name is invalid.
+    public func write(_ data: Data) throws {
+        try defaults.set(data, forKey: key)
     }
 
     /// Ensures no value is stored for `key`. Deleting a value that

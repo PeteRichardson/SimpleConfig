@@ -282,3 +282,66 @@ struct KeychainReadErrorTests {
         #expect(try item.read() == "hello")
     }
 }
+
+@Suite("ConfigItem Data values")
+struct ConfigItemDataTests {
+    let suiteName = "com.peterichardson.SimpleConfigTests.data-values"
+
+    @Test("write(Data) then readData() round-trips the same bytes")
+    func dataRoundTrip() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "blob")
+        let bytes = Data([0x01, 0x02, 0x03])
+        try item.write(bytes)
+        defer { try? item.delete() }
+        #expect(try item.readData() == bytes)
+    }
+
+    @Test("write(Data) then read() returns nil (type mismatch)")
+    func dataThenStringReadIsNil() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "blob-vs-string")
+        try item.write(Data([0xFF]))
+        defer { try? item.delete() }
+        #expect(try item.read() == nil)
+    }
+
+    @Test("write(String) then readData() returns nil (type mismatch)")
+    func stringThenDataReadIsNil() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "string-vs-blob")
+        try item.write("hello")
+        defer { try? item.delete() }
+        #expect(try item.readData() == nil)
+    }
+
+    @Test("readData() on a reserved suite name throws")
+    func readDataThrowsOnReservedSuite() {
+        let item = ConfigItem(suiteName: UserDefaults.globalDomain, key: "anything")
+        #expect(throws: ConfigError.self) { try item.readData() }
+    }
+
+    @Test("readData() on a never-written key returns nil")
+    func readDataOnMissingKeyIsNil() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "never-written-blob")
+        #expect(try item.readData() == nil)
+    }
+}
+
+@Suite("ConfigItem description")
+struct ConfigItemDescriptionTests {
+    @Test("a present string value renders directly")
+    func presentString() {
+        let output = ConfigItem.describe(key: "host", stringValue: "example.com", dataByteCount: nil)
+        #expect(output == "host = example.com")
+    }
+
+    @Test("no string but a byte count renders as a binary value")
+    func binaryValue() {
+        let output = ConfigItem.describe(key: "blob", stringValue: nil, dataByteCount: 3)
+        #expect(output == "blob = (binary value, 3 bytes)")
+    }
+
+    @Test("neither a string nor a byte count renders as not set")
+    func notSet() {
+        let output = ConfigItem.describe(key: "missing", stringValue: nil, dataByteCount: nil)
+        #expect(output == "missing = (not set)")
+    }
+}
