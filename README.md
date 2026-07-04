@@ -127,6 +127,22 @@ let pairs = try ConfigItem.items(inSuite: "com.example.myapp").keyValuePairs()
 // [(key: "host", value: "api.example.com")]
 ```
 
+Store binary values (certificates, key material, tokens) alongside
+strings — each concrete type offers a `Data` overload:
+
+```swift
+let cert = SecureConfigItem(service: "com.example.myapp", key: "clientCert")
+try cert.write(certificateData)          // Data, not String
+try cert.readData()                      // Data? — the raw bytes back
+print(cert)                              // clientCert = (binary value, 942 bytes)
+
+// UserDefaults keeps String and Data separate per key — writing one
+// type makes the other accessor return nil:
+let cache = ConfigItem(suiteName: "com.example.myapp", key: "cachedBlob")
+try cache.write(Data([0x01, 0x02]))
+try cache.read()                         // nil — no String was ever written
+```
+
 ---
 
 ## API
@@ -142,10 +158,11 @@ Every `ConfigStorable` provides:
 
 - `read() throws -> String?` — the stored value, or `nil` if not set
 - `write(_ value: String) throws` — store, replacing any existing value
+- `readData() throws -> Data?` / `write(_ data: Data) throws` (on `ConfigItem` and `SecureConfigItem`, not part of `ConfigStorable`) — binary storage; `ConfigItem` keeps `String`/`Data` as separate types per key, `SecureConfigItem` treats both as the same underlying bytes
 - `delete() throws` — ensure absent; deleting a missing value succeeds silently
 - `ConfigItem.items(inSuite:)` / `SecureConfigItem.items(inService:)` — all items in a namespace, sorted by key; secret values are never read
 - `keyValuePairs()` (on homogeneous item sequences) — plain `(key, value)` tuples; throws on read errors, drops values with no string form
-- `description` — `key = value` rendering; `SecureConfigItem` redacts the value
+- `description` — `key = value` rendering; `SecureConfigItem` redacts the value; a `Data`-only value renders as its byte count
 - `Comparable` — items sort by `key`
 
 Errors: `ConfigItem` throws `ConfigError.unableToLoad` when the suite name
@@ -158,7 +175,7 @@ Architecture details live in [docs/design.md](docs/design.md).
 
 ## Known Limitations
 
-- **Strings only** — no typed or binary values; encode richer types yourself. (`Data` support is under consideration.)
+- **No typed/Codable values** — only `String` and `Data` are supported; encoding richer types (e.g. via `Codable`) is the caller's job.
 - **Apple platforms only** — both backends are Apple OS services; there is no Linux/Windows fallback.
 - **Keychain reads collapse errors to `nil`** — a genuine failure (e.g. reading while the device is locked) is currently indistinguishable from "not set." Tracked as an open question in [docs/design.md](docs/design.md).
 - **Keychain writes are delete-then-add** — the item briefly doesn't exist during a rewrite; there's no atomic update.

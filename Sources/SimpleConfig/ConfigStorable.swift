@@ -41,8 +41,9 @@ extension ConfigStorable {
 extension Sequence where Element: ConfigStorable {
     /// The string view of these items: each item's key paired with its
     /// current value, in this sequence's order. Items whose value reads
-    /// as `nil` (deleted since enumeration, or not representable as a
-    /// string — e.g. a non-string `UserDefaults` value) are dropped.
+    /// as `nil` (deleted since enumeration, or stored only as `Data` —
+    /// see `readData()`/`write(_ data: Data)` on `ConfigItem` and
+    /// `SecureConfigItem`) are dropped.
     /// Reading a `SecureConfigItem` sequence materializes every secret
     /// in plaintext — call deliberately.
     ///
