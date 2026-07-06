@@ -465,6 +465,7 @@ struct DefaultDomainTests {
             Issue.record("expected ConfigError.noDomain, got \(error)")
             return
         }
+        #expect(fixture.$secret.lastError != nil)
     }
 
     @Test("a subsequent successful operation clears lastError")
@@ -562,6 +563,7 @@ struct StoredWrapperTests {
         @Stored("sw-nickname", suite: storedSuite) var nickname: String?
         @Stored("sw-blob", suite: storedSuite) var blob: Data?
         @Stored("sw-broken", suite: UserDefaults.globalDomain) var broken: String = "fallback"
+        @Stored("sw-rawblob", suite: storedSuite) var rawblob: Data = Data()
     }
 
     @Test("an unset key reads the declared default, and the default is never written")
@@ -626,6 +628,23 @@ struct StoredWrapperTests {
         _ = fixture.defaultOnly
         #expect(fixture.$defaultOnly.lastError == nil)
     }
+
+    @Test("a failed write is dropped and sets lastError")
+    func failedWriteIsDropped() {
+        var fixture = Fixture()
+        fixture.broken = "attempted"
+        #expect(fixture.$broken.lastError != nil)
+        // The write was dropped, and the subsequent read also fails, falling back to the default:
+        #expect(fixture.broken == "fallback")
+    }
+
+    @Test("Data round-trips through the wrapper")
+    func rawDataRoundTrip() throws {
+        var fixture = Fixture()
+        defer { try? ConfigItem(suiteName: storedSuite, key: "sw-rawblob").delete() }
+        fixture.rawblob = Data([0x0A, 0x0B])
+        #expect(fixture.rawblob == Data([0x0A, 0x0B]))
+    }
 }
 
 private let secureService = "com.peterichardson.SimpleConfigTests.secure-wrapper"
@@ -638,6 +657,7 @@ struct SecureWrapperTests {
         @Secure("sec-unset-opt", service: secureService) var unsetOpt: String?
         @Secure("sec-token", service: secureService) var token: String?
         @Secure("sec-blob", service: secureService) var blob: Data?
+        @Secure("sec-rawblob", service: secureService) var rawblob: Data = Data()
     }
 
     @Test("an unset key reads the declared default, and the default is never written")
@@ -686,6 +706,14 @@ struct SecureWrapperTests {
         #expect(fixture.$roundtrip.item?.service == secureService)
         #expect(fixture.$roundtrip.item?.key == "sec-roundtrip")
     }
+
+    @Test("Data round-trips through the wrapper")
+    func rawDataRoundTrip() throws {
+        var fixture = Fixture()
+        defer { try? SecureConfigItem(service: secureService, key: "sec-rawblob").delete() }
+        fixture.rawblob = Data([0x0A, 0x0B])
+        #expect(fixture.rawblob == Data([0x0A, 0x0B]))
+    }
 }
 
 private let groupSuite = "com.peterichardson.SimpleConfigTests.config-group"
@@ -717,6 +745,14 @@ struct ConfigGroupTests {
     struct OuterWithPlain: ConfigGroup {
         var plain = PlainMember()
         @Stored("cg-owp-good", suite: groupSuite) var good: String = "ok"
+    }
+
+    struct HealthyInner: ConfigGroup {
+        @Stored("cg-healthy-inner", suite: groupSuite) var value: String = "ok"
+    }
+    struct HealthyOuter: ConfigGroup {
+        var inner = HealthyInner()
+        @Stored("cg-healthy-outer", suite: groupSuite) var outerValue: String = "ok"
     }
 
     @Test("a healthy group (mixing both backends) has no configErrors and is valid")
@@ -757,5 +793,24 @@ struct ConfigGroupTests {
     @Test("plain non-group members are not probed")
     func plainMembersIgnored() {
         #expect(OuterWithPlain().configErrors.isEmpty)
+    }
+
+    @Test("read() on an outer group throws invalidGroup with a path-prefixed key for a broken nested group")
+    func readThrowsOnBrokenNestedGroup() throws {
+        do {
+            _ = try Outer.read()
+            Issue.record("expected ConfigError.invalidGroup to be thrown")
+        } catch let ConfigError.invalidGroup(errors) {
+            #expect(Array(errors.keys) == ["inner.innerBad"])
+        }
+    }
+
+    @Test("a healthy nested group has no configErrors and read() succeeds")
+    func healthyNestedGroupIsValid() throws {
+        let group = HealthyOuter()
+        #expect(group.configErrors.isEmpty)
+        let read = try HealthyOuter.read()
+        #expect(read.inner.value == "ok")
+        #expect(read.outerValue == "ok")
     }
 }
