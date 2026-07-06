@@ -404,3 +404,28 @@ struct ConfigItemDescriptionTests {
         #expect(output == "missing = (not set)")
     }
 }
+
+@Suite("ConfigError group cases")
+struct ConfigErrorGroupTests {
+    @Test("noDomain description points at SimpleConfig.defaultDomain")
+    func noDomainDescription() {
+        #expect(ConfigError.noDomain.description.contains("SimpleConfig.defaultDomain"))
+    }
+
+    @Test("invalidGroup description names the failing properties")
+    func invalidGroupDescription() {
+        let error = ConfigError.invalidGroup(["apiKey": ConfigError.noDomain])
+        #expect(error.description.contains("apiKey"))
+    }
+}
+
+@Suite("SimpleConfig.defaultDomain", .serialized)
+struct DefaultDomainTests {
+    @Test("set and get round-trip, and reset to nil")
+    func setAndGetRoundTrip() {
+        SimpleConfig.defaultDomain = "com.peterichardson.SimpleConfigTests.default-domain"
+        #expect(SimpleConfig.defaultDomain == "com.peterichardson.SimpleConfigTests.default-domain")
+        SimpleConfig.defaultDomain = nil
+        #expect(SimpleConfig.defaultDomain == nil)
+    }
+}
