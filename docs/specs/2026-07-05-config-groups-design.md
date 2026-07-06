@@ -82,7 +82,7 @@ default.
 
 ## Components
 
-Three new files in `Sources/SimpleConfig/`; the existing
+Five new files in `Sources/SimpleConfig/`; the existing
 `ConfigStorable`, `ConfigItem`, `SecureConfigItem`, and `Keychain` do
 not change at all — the wrappers are purely a layer on top.
 
@@ -170,8 +170,10 @@ either way for a diagnostic affordance. Anyone needing throwing behavior uses
 ### `SimpleConfig.swift`
 
 A caseless `public enum SimpleConfig` namespace holding
-`static var defaultDomain: String?` (initially `nil`), guarded by a
-`Mutex` for Swift 6 strict concurrency.
+`static var defaultDomain: String?` (initially `nil`), guarded by an
+`NSLock` for Swift 6 strict concurrency (`Synchronization.Mutex` would
+force a macOS 15+ platform floor onto a package that currently
+declares no platform requirements).
 
 ### `ConfigGroup` (in `SimpleConfig.swift` or its own file)
 
