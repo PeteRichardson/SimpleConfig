@@ -119,13 +119,13 @@ Two structurally identical wrappers differing only in backing type:
 public struct Stored<Value: ConfigValue> {
     public init(wrappedValue: Value, _ key: String, suite: String? = nil)
     public var wrappedValue: Value { get set }   // nonmutating get, mutating set
-    public var projectedValue: StoredProjection<Value> { get }
+    public var projectedValue: StoredProjection { get }
 }
 
 @propertyWrapper
 public struct Secure<Value: ConfigValue> {
     public init(wrappedValue: Value, _ key: String, service: String? = nil)
-    // same shape; SecureProjection<Value>
+    // same shape; SecureProjection
 }
 ```
 
@@ -155,15 +155,16 @@ Accessor behavior:
 The projection exposes:
 
 ```swift
-public struct StoredProjection<Value: ConfigValue> {
+public struct StoredProjection {
     public var item: ConfigItem?      // nil when no domain resolves
     public var lastError: Error?      // most recent op's error; nil after success
 }
 ```
 
-`lastError` is per-wrapper-instance (it lives in the error box), so two
-copies of a config struct have independent error state — acceptable for
-a diagnostic affordance. Anyone needing throwing behavior uses
+`lastError` lives in the wrapper's error box, so separately constructed
+config structs have independent error state, while copies of one struct
+share it (copying the struct copies the box reference) — acceptable
+either way for a diagnostic affordance. Anyone needing throwing behavior uses
 `$property.item` to reach the underlying item's throwing API.
 
 ### `SimpleConfig.swift`
@@ -230,7 +231,8 @@ Live property access composes through nesting with no special support
 (`config.serverConfig.host` is just struct-in-struct access). The
 probe, however, must recurse: when a mirrored child is itself a
 `ConfigGroup`, `configErrors` descends into it and prefixes its error
-keys with the property path (`"serverConfig.api-key"`). Conforming the
+keys with the property path (`"serverConfig.apiKey"` — Swift property
+names, not storage keys). Conforming the
 nested type to `ConfigGroup` is the recursion signal — the probe does
 not reflect into arbitrary non-group types. Two requirements follow for
 nested members: the nested type declares `: ConfigGroup`, and the
@@ -307,7 +309,7 @@ tests.
 10. Nested groups: an outer struct containing a `ConfigGroup` member is
     probed recursively — a failure inside the nested group surfaces in
     the outer `configErrors` under the prefixed key
-    (`"serverConfig.api-key"`), and `read()` on the outer struct throws
+    (`"serverConfig.apiKey"`), and `read()` on the outer struct throws
     accordingly; a healthy nested fixture validates clean.
 11. Non-group struct members are not probed (a plain struct member with
     no `ConfigGroup` conformance contributes nothing to
