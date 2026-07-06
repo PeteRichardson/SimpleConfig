@@ -428,6 +428,69 @@ struct DefaultDomainTests {
         SimpleConfig.defaultDomain = nil
         #expect(SimpleConfig.defaultDomain == nil)
     }
+
+    @Test("a wrapper with no explicit suite uses the default domain")
+    func wrapperUsesDefaultDomain() throws {
+        SimpleConfig.defaultDomain = "com.peterichardson.SimpleConfigTests.default-domain"
+        defer { SimpleConfig.defaultDomain = nil }
+        struct Fixture {
+            @Stored("dd-name") var name: String = "Ernest"
+        }
+        var fixture = Fixture()
+        defer {
+            try? ConfigItem(
+                suiteName: "com.peterichardson.SimpleConfigTests.default-domain",
+                key: "dd-name"
+            ).delete()
+        }
+        fixture.name = "Gladys"
+        #expect(fixture.name == "Gladys")
+        #expect(fixture.$name.item?.suiteName == "com.peterichardson.SimpleConfigTests.default-domain")
+    }
+
+    @Test("no domain at all yields ConfigError.noDomain and a nil item")
+    func noDomainYieldsError() throws {
+        SimpleConfig.defaultDomain = nil
+        struct Fixture {
+            @Stored("dd-orphan") var orphan: String = "fallback"
+            @Secure("dd-secret") var secret: String?
+        }
+        let fixture = Fixture()
+        #expect(fixture.orphan == "fallback")
+        #expect(fixture.secret == nil)
+        #expect(fixture.$orphan.item == nil)
+        #expect(fixture.$secret.item == nil)
+        let error = try #require(fixture.$orphan.lastError as? ConfigError)
+        guard case .noDomain = error else {
+            Issue.record("expected ConfigError.noDomain, got \(error)")
+            return
+        }
+    }
+
+    @Test("a subsequent successful operation clears lastError")
+    func successClearsLastError() {
+        SimpleConfig.defaultDomain = nil
+        struct Fixture {
+            @Stored("dd-clear") var value: String = "fallback"
+        }
+        let fixture = Fixture()
+        _ = fixture.value                    // fails: no domain
+        #expect(fixture.$value.lastError != nil)
+        SimpleConfig.defaultDomain = "com.peterichardson.SimpleConfigTests.default-domain"
+        defer { SimpleConfig.defaultDomain = nil }
+        _ = fixture.value                    // succeeds now (reads nil → default)
+        #expect(fixture.$value.lastError == nil)
+    }
+
+    @Test("a group probe reports noDomain per property")
+    func noDomainInConfigErrors() {
+        SimpleConfig.defaultDomain = nil
+        struct Group: ConfigGroup {
+            @Stored("dd-group-value") var value: String = "x"
+        }
+        let errors = Group().configErrors
+        #expect(Array(errors.keys) == ["value"])
+    }
 }
 
 @Suite("ConfigValue conformances")
