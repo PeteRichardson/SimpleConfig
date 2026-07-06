@@ -177,7 +177,6 @@ Architecture details live in [docs/design.md](docs/design.md).
 
 - **No typed/Codable values** — only `String` and `Data` are supported; encoding richer types (e.g. via `Codable`) is the caller's job.
 - **Apple platforms only** — both backends are Apple OS services; there is no Linux/Windows fallback.
-- **Keychain reads collapse errors to `nil`** — a genuine failure (e.g. reading while the device is locked) is currently indistinguishable from "not set." Tracked as an open question in [docs/design.md](docs/design.md).
 - **Keychain writes are delete-then-add** — the item briefly doesn't exist during a rewrite; there's no atomic update.
 
 <!-- 🖊 TODO: Review — inferred from docs/design.md open questions and source. -->
