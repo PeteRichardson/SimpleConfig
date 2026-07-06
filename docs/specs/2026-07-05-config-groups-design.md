@@ -210,6 +210,38 @@ validates at that moment; properties stay live afterward, so a later
 access can still fail (e.g. the Keychain locks) — `$property.lastError`
 remains the tool for that.
 
+**Nested groups.** A config struct may contain other config structs:
+
+```swift
+struct ServerConfig: ConfigGroup {
+    @Stored("host") var host: String = "localhost"
+    @Secure("api-key") var apiKey: String = ""
+}
+
+struct MyAppConfig: ConfigGroup {
+    var serverConfig = ServerConfig()
+    @Stored("data-dir") var appDataDir: String = ".myApp/Data"
+}
+
+var config = try MyAppConfig.read()   // validates all three properties
+```
+
+Live property access composes through nesting with no special support
+(`config.serverConfig.host` is just struct-in-struct access). The
+probe, however, must recurse: when a mirrored child is itself a
+`ConfigGroup`, `configErrors` descends into it and prefixes its error
+keys with the property path (`"serverConfig.api-key"`). Conforming the
+nested type to `ConfigGroup` is the recursion signal — the probe does
+not reflect into arbitrary non-group types. Two requirements follow for
+nested members: the nested type declares `: ConfigGroup`, and the
+property has a default (`= ServerConfig()`) so the outer struct keeps
+its synthesized `init()`.
+
+Nesting is code organization only — keys stay flat within the domain
+(`"host"` is stored as `"host"` at any depth), so distinct nested
+groups must use distinct keys. Per-group key prefixing is explicitly
+not included (see Out of Scope).
+
 ### `ConfigError` additions
 
 Two new cases:
@@ -240,6 +272,8 @@ no callbacks.
   source changes.
 - No macro target, no external dependencies.
 - No typed/Codable values beyond `String`/`Data` and their optionals.
+- No per-group key prefixing/namespacing — nested groups share the
+  domain's flat key space; callers pick non-colliding keys.
 - No caching of the underlying items or values.
 - No Keychain-error → `ConfigError` migration (separate, tracked).
 
@@ -270,6 +304,14 @@ tests.
 8. `read()` returns a working instance on success; throws
    `ConfigError.invalidGroup` with the right keys on failure.
 9. A struct mixing `@Stored` and `@Secure` probes both backends.
+10. Nested groups: an outer struct containing a `ConfigGroup` member is
+    probed recursively — a failure inside the nested group surfaces in
+    the outer `configErrors` under the prefixed key
+    (`"serverConfig.api-key"`), and `read()` on the outer struct throws
+    accordingly; a healthy nested fixture validates clean.
+11. Non-group struct members are not probed (a plain struct member with
+    no `ConfigGroup` conformance contributes nothing to
+    `configErrors`).
 
 **`defaultDomain`** — process-global state, and Swift Testing runs
 suites in parallel, so *all* tests touching it live in one suite marked
