@@ -174,7 +174,7 @@ and `Data?`.
 
 ## API
 
-The whole surface is one protocol and two conforming structs:
+The core surface is one protocol and two conforming structs, plus a property-wrapper layer on top:
 
 | Type | Backend | Construction |
 |------|---------|--------------|
