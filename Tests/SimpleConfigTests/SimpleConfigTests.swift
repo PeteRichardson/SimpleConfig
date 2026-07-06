@@ -429,3 +429,61 @@ struct DefaultDomainTests {
         #expect(SimpleConfig.defaultDomain == nil)
     }
 }
+
+@Suite("ConfigValue conformances")
+struct ConfigValueTests {
+    let suiteName = "com.peterichardson.SimpleConfigTests.config-value"
+    let service = "com.peterichardson.SimpleConfigTests.config-value"
+
+    @Test("String round-trips through a ConfigItem")
+    func stringThroughConfigItem() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "cv-string")
+        defer { try? item.delete() }
+        try "hello".write(to: item)
+        #expect(try String.read(from: item) == "hello")
+    }
+
+    @Test("Data round-trips through a ConfigItem")
+    func dataThroughConfigItem() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "cv-data")
+        defer { try? item.delete() }
+        try Data([0x01, 0x02]).write(to: item)
+        #expect(try Data.read(from: item) == Data([0x01, 0x02]))
+    }
+
+    @Test("writing nil through Optional deletes the stored value")
+    func optionalNilWriteDeletes() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "cv-opt-delete")
+        try "x".write(to: item)
+        let none: String? = nil
+        try none.write(to: item)
+        #expect(try item.read() == nil)
+    }
+
+    @Test("Optional reads distinguish absent from present")
+    func optionalReadDistinguishesPresence() throws {
+        let item = ConfigItem(suiteName: suiteName, key: "cv-opt-read")
+        defer { try? item.delete() }
+        // Absent reads as .some(.none): "the read worked; the value is nil."
+        #expect(try Optional<String>.read(from: item) == .some(.none))
+        try "y".write(to: item)
+        #expect(try Optional<String>.read(from: item) == "y")
+    }
+
+    @Test("String round-trips through a SecureConfigItem")
+    func stringThroughSecureItem() throws {
+        let item = SecureConfigItem(service: service, key: "cv-secure-string")
+        defer { try? item.delete() }
+        try "hush".write(to: item)
+        #expect(try String.read(from: item) == "hush")
+    }
+
+    @Test("writing nil through Optional deletes a Keychain value")
+    func optionalNilWriteDeletesSecure() throws {
+        let item = SecureConfigItem(service: service, key: "cv-secure-opt")
+        try "x".write(to: item)
+        let none: String? = nil
+        try none.write(to: item)
+        #expect(try item.read() == nil)
+    }
+}
