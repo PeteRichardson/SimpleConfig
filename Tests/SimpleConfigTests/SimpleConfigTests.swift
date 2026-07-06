@@ -487,3 +487,80 @@ struct ConfigValueTests {
         #expect(try item.read() == nil)
     }
 }
+
+private let storedSuite = "com.peterichardson.SimpleConfigTests.stored-wrapper"
+
+@Suite("Stored wrapper")
+struct StoredWrapperTests {
+    struct Fixture {
+        @Stored("sw-roundtrip", suite: storedSuite) var roundtrip: String = "unset"
+        @Stored("sw-default", suite: storedSuite) var defaultOnly: String = "DefaultOnly"
+        @Stored("sw-unset-opt", suite: storedSuite) var unsetOpt: String?
+        @Stored("sw-nickname", suite: storedSuite) var nickname: String?
+        @Stored("sw-blob", suite: storedSuite) var blob: Data?
+        @Stored("sw-broken", suite: UserDefaults.globalDomain) var broken: String = "fallback"
+    }
+
+    @Test("an unset key reads the declared default, and the default is never written")
+    func defaultWhenUnset() throws {
+        let fixture = Fixture()
+        #expect(fixture.defaultOnly == "DefaultOnly")
+        // Read-time fallback only — nothing was persisted by that read:
+        #expect(try ConfigItem(suiteName: storedSuite, key: "sw-default").read() == nil)
+    }
+
+    @Test("assignment writes through to UserDefaults immediately")
+    func writeThenRead() throws {
+        var fixture = Fixture()
+        defer { try? ConfigItem(suiteName: storedSuite, key: "sw-roundtrip").delete() }
+        fixture.roundtrip = "Gladys"
+        #expect(fixture.roundtrip == "Gladys")
+        // Really in UserDefaults, not cached in the struct:
+        #expect(try ConfigItem(suiteName: storedSuite, key: "sw-roundtrip").read() == "Gladys")
+    }
+
+    @Test("an optional property reads nil when unset")
+    func optionalNilWhenUnset() {
+        let fixture = Fixture()
+        #expect(fixture.unsetOpt == nil)
+    }
+
+    @Test("assigning nil to an optional property deletes the stored value")
+    func assignNilDeletes() throws {
+        var fixture = Fixture()
+        fixture.nickname = "Ernie"
+        #expect(try ConfigItem(suiteName: storedSuite, key: "sw-nickname").read() == "Ernie")
+        fixture.nickname = nil
+        #expect(try ConfigItem(suiteName: storedSuite, key: "sw-nickname").read() == nil)
+        #expect(fixture.nickname == nil)
+    }
+
+    @Test("Data? round-trips through the wrapper")
+    func dataRoundTrip() throws {
+        var fixture = Fixture()
+        defer { try? ConfigItem(suiteName: storedSuite, key: "sw-blob").delete() }
+        fixture.blob = Data([0x01, 0x02, 0x03])
+        #expect(fixture.blob == Data([0x01, 0x02, 0x03]))
+    }
+
+    @Test("the projection exposes the underlying item")
+    func projectionItem() {
+        let fixture = Fixture()
+        #expect(fixture.$roundtrip.item?.suiteName == storedSuite)
+        #expect(fixture.$roundtrip.item?.key == "sw-roundtrip")
+    }
+
+    @Test("a failed read returns the default and sets lastError")
+    func failedReadFallsBack() {
+        let fixture = Fixture()
+        #expect(fixture.broken == "fallback")
+        #expect(fixture.$broken.lastError != nil)
+    }
+
+    @Test("a successful read leaves lastError nil")
+    func successfulReadLeavesNoError() {
+        let fixture = Fixture()
+        _ = fixture.defaultOnly
+        #expect(fixture.$defaultOnly.lastError == nil)
+    }
+}
