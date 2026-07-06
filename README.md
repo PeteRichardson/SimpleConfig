@@ -15,7 +15,7 @@
 
 > _One API for app settings and secrets — UserDefaults or Keychain, chosen per item._
 
-SimpleConfig is a small Swift package that stores string key-value configuration on Apple platforms behind a single protocol, `ConfigStorable`. Each item picks its backend at construction time: `ConfigItem` for ordinary settings (backed by a `UserDefaults` suite) and `SecureConfigItem` for secrets like API keys (backed by the Keychain), so the rest of your code reads, writes, deletes, sorts, and prints them identically — without ever touching the Security framework's C API. Secret values are automatically redacted when printed, so config listings are safe to log. The deliberate trade-off is simplicity: values are strings only, and the package is Apple-only.
+SimpleConfig is a small Swift package that stores string key-value configuration on Apple platforms behind a single protocol, `ConfigStorable`. Each item picks its backend at construction time: `ConfigItem` for ordinary settings (backed by a `UserDefaults` suite) and `SecureConfigItem` for secrets like API keys (backed by the Keychain), so the rest of your code reads, writes, deletes, sorts, and prints them identically — without ever touching the Security framework's C API. Secret values are automatically redacted when printed, so config listings are safe to log. The deliberate trade-off is simplicity: values are strings and raw bytes only, and the package is Apple-only.
 
 > **Status:** Stable — breaking changes only on major versions.
 
@@ -37,6 +37,7 @@ SimpleConfig is a small Swift package that stores string key-value configuration
 ## Features
 
 - **One protocol, two backends** — `ConfigStorable` gives every item the same `read()` / `write(_:)` / `delete()` surface whether it lives in `UserDefaults` or the Keychain; hold them together in one collection.
+- **Config structs, not just items** — declare a plain struct with `@Stored`/`@Secure` properties and get live storage-backed values, code-defined defaults, and one-call validation with `try MyConfig.read()`; groups can nest.
 - **Safe-to-log secrets** — printing a `SecureConfigItem` redacts the value (`apiToken = sk-abc....................ghi789`): secrets under 5 characters are hidden entirely, at most 6 characters show per side, and the fixed-width mask never leaks the secret's length.
 - **Idempotent delete** — `delete()` means "ensure absent"; deleting a value that was never set is success, not an error.
 - **Caller-supplied namespaces** — you choose the `UserDefaults` suite name and Keychain service, so one app can partition its config and multiple tools can share (or isolate) theirs.
@@ -143,6 +144,32 @@ try cache.write(Data([0x01, 0x02]))
 try cache.read()                         // nil — no String was ever written
 ```
 
+Or skip individual items entirely: declare your config as a struct.
+Properties are live (every get reads storage, every set writes it),
+defaults are read-time fallbacks that are never written to storage,
+and one call validates everything:
+
+```swift
+SimpleConfig.defaultDomain = "com.example.myapp"   // once, at startup
+
+struct MyConfig: ConfigGroup {
+    @Stored("defaultName") var defaultName: String = "Ernest"
+    @Secure("apiKey")      var apiKey: String?     // nil = not set
+}
+
+var config = try MyConfig.read()   // throws if any property is unreadable
+print("Hello, \(config.defaultName)!")             // "Ernest" until customized
+config.defaultName = "Gladys"                      // written immediately
+config.apiKey = nil                                // deletes from the Keychain
+```
+
+Wrapper accessors never throw: a failed read returns the default and a
+failed write is dropped, with the error recorded on the projection —
+check `config.$apiKey.lastError`, or reach the throwing API via
+`config.$apiKey.item`. Groups nest (a `ConfigGroup` member is validated
+recursively); supported property types are `String`, `String?`, `Data`,
+and `Data?`.
+
 ---
 
 ## API
@@ -165,9 +192,18 @@ Every `ConfigStorable` provides:
 - `description` — `key = value` rendering; `SecureConfigItem` redacts the value; a `Data`-only value renders as its byte count
 - `Comparable` — items sort by `key`
 
+The property-wrapper layer adds:
+
+- `@Stored("key")` / `@Secure("key")` — live struct properties backed by `UserDefaults`/Keychain; explicit `suite:`/`service:` beats the process-wide `SimpleConfig.defaultDomain`
+- `$property.item` / `$property.lastError` — the underlying item and the most recent failure (accessors never throw)
+- `ConfigGroup` — free conformance for all-defaults structs: `configErrors` / `isConfigValid` probe every property (nested groups recursively), `try MyConfig.read()` constructs and validates in one call
+
 Errors: `ConfigItem` throws `ConfigError.unableToLoad` when the suite name
 is invalid (e.g. `NSGlobalDomain` or your app's own bundle identifier);
-Keychain failures surface as `NSError` with the OSStatus code.
+Keychain failures surface as `NSError` with the OSStatus code. The wrapper
+layer adds `ConfigError.noDomain` (no explicit domain and
+`SimpleConfig.defaultDomain` unset) and `ConfigError.invalidGroup` (thrown
+by `ConfigGroup.read()`, keyed by property path).
 
 Architecture details live in [docs/design.md](docs/design.md).
 
