@@ -624,3 +624,75 @@ struct SecureWrapperTests {
         #expect(fixture.$roundtrip.item?.key == "sec-roundtrip")
     }
 }
+
+private let groupSuite = "com.peterichardson.SimpleConfigTests.config-group"
+private let groupService = "com.peterichardson.SimpleConfigTests.config-group"
+
+@Suite("ConfigGroup")
+struct ConfigGroupTests {
+    struct HealthyGroup: ConfigGroup {
+        @Stored("cg-host", suite: groupSuite) var host: String = "localhost"
+        @Secure("cg-token", service: groupService) var token: String?
+    }
+
+    struct BrokenGroup: ConfigGroup {
+        @Stored("cg-good", suite: groupSuite) var good: String = "ok"
+        @Stored("cg-bad", suite: UserDefaults.globalDomain) var bad: String = "x"
+    }
+
+    struct Inner: ConfigGroup {
+        @Stored("cg-inner-bad", suite: UserDefaults.globalDomain) var innerBad: String = "x"
+    }
+    struct Outer: ConfigGroup {
+        var inner = Inner()
+        @Stored("cg-outer-good", suite: groupSuite) var outerGood: String = "ok"
+    }
+
+    struct PlainMember {
+        var untouched = 1
+    }
+    struct OuterWithPlain: ConfigGroup {
+        var plain = PlainMember()
+        @Stored("cg-owp-good", suite: groupSuite) var good: String = "ok"
+    }
+
+    @Test("a healthy group (mixing both backends) has no configErrors and is valid")
+    func healthyGroupIsValid() {
+        let group = HealthyGroup()
+        #expect(group.configErrors.isEmpty)
+        #expect(group.isConfigValid)
+    }
+
+    @Test("configErrors is keyed by property name, only for failing properties")
+    func brokenGroupErrorsKeyedByName() {
+        let errors = BrokenGroup().configErrors
+        #expect(Array(errors.keys) == ["bad"])
+    }
+
+    @Test("read() returns a working instance for a healthy group")
+    func readSucceeds() throws {
+        let group = try HealthyGroup.read()
+        #expect(group.host == "localhost")
+    }
+
+    @Test("read() throws invalidGroup naming the failing property")
+    func readThrowsOnBrokenGroup() throws {
+        do {
+            _ = try BrokenGroup.read()
+            Issue.record("expected ConfigError.invalidGroup to be thrown")
+        } catch let ConfigError.invalidGroup(errors) {
+            #expect(Array(errors.keys) == ["bad"])
+        }
+    }
+
+    @Test("nested group failures surface under a property-path key")
+    func nestedErrorsArePrefixed() {
+        let errors = Outer().configErrors
+        #expect(Array(errors.keys) == ["inner.innerBad"])
+    }
+
+    @Test("plain non-group members are not probed")
+    func plainMembersIgnored() {
+        #expect(OuterWithPlain().configErrors.isEmpty)
+    }
+}
