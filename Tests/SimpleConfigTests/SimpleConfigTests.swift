@@ -564,3 +564,63 @@ struct StoredWrapperTests {
         #expect(fixture.$defaultOnly.lastError == nil)
     }
 }
+
+private let secureService = "com.peterichardson.SimpleConfigTests.secure-wrapper"
+
+@Suite("Secure wrapper")
+struct SecureWrapperTests {
+    struct Fixture {
+        @Secure("sec-roundtrip", service: secureService) var roundtrip: String = "unset"
+        @Secure("sec-default", service: secureService) var defaultOnly: String = "DefaultOnly"
+        @Secure("sec-unset-opt", service: secureService) var unsetOpt: String?
+        @Secure("sec-token", service: secureService) var token: String?
+        @Secure("sec-blob", service: secureService) var blob: Data?
+    }
+
+    @Test("an unset key reads the declared default, and the default is never written")
+    func defaultWhenUnset() throws {
+        let fixture = Fixture()
+        #expect(fixture.defaultOnly == "DefaultOnly")
+        #expect(try SecureConfigItem(service: secureService, key: "sec-default").read() == nil)
+    }
+
+    @Test("assignment writes through to the Keychain immediately")
+    func writeThenRead() throws {
+        var fixture = Fixture()
+        defer { try? SecureConfigItem(service: secureService, key: "sec-roundtrip").delete() }
+        fixture.roundtrip = "sk-12345"
+        #expect(fixture.roundtrip == "sk-12345")
+        #expect(try SecureConfigItem(service: secureService, key: "sec-roundtrip").read() == "sk-12345")
+    }
+
+    @Test("an optional property reads nil when unset")
+    func optionalNilWhenUnset() {
+        let fixture = Fixture()
+        #expect(fixture.unsetOpt == nil)
+    }
+
+    @Test("assigning nil to an optional property deletes the Keychain value")
+    func assignNilDeletes() throws {
+        var fixture = Fixture()
+        fixture.token = "temporary"
+        #expect(try SecureConfigItem(service: secureService, key: "sec-token").read() == "temporary")
+        fixture.token = nil
+        #expect(try SecureConfigItem(service: secureService, key: "sec-token").read() == nil)
+        #expect(fixture.token == nil)
+    }
+
+    @Test("Data? round-trips through the wrapper")
+    func dataRoundTrip() throws {
+        var fixture = Fixture()
+        defer { try? SecureConfigItem(service: secureService, key: "sec-blob").delete() }
+        fixture.blob = Data([0xFF, 0xFE])
+        #expect(fixture.blob == Data([0xFF, 0xFE]))
+    }
+
+    @Test("the projection exposes the underlying item")
+    func projectionItem() {
+        let fixture = Fixture()
+        #expect(fixture.$roundtrip.item?.service == secureService)
+        #expect(fixture.$roundtrip.item?.key == "sec-roundtrip")
+    }
+}
