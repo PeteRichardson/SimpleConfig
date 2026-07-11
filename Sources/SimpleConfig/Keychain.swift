@@ -18,22 +18,30 @@ enum Keychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+        ]
+        let attributes: [String: Any] = [
             kSecValueData as String: data,
             // AfterFirstUnlock so background processes can still read the
             // value after a reboot, once the device has been unlocked.
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
 
-        // Delete-then-add instead of SecItemUpdate: simpler, at the cost of
-        // the item briefly not existing. Ignore the delete status — a missing
-        // item (errSecItemNotFound) is expected on first write.
-        SecItemDelete(query as CFDictionary)
-
-        let status = SecItemAdd(query as CFDictionary, nil)
+        // Add first so a failure cannot destroy an existing secret. If the
+        // item already exists, update it in place instead.
+        let status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw NSError(
+                    domain: "Keychain", code: Int(updateStatus),
+                    userInfo: [NSLocalizedDescriptionKey: "Unable to update keychain item"])
+            }
+            return
+        }
         guard status == errSecSuccess else {
             throw NSError(
                 domain: "Keychain", code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Unable to save API key"])
+                userInfo: [NSLocalizedDescriptionKey: "Unable to save keychain item"])
         }
     }
 

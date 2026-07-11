@@ -31,8 +31,9 @@ extension ConfigStorable {
         "\(key) = \((try? read()) ?? "(not set)")"
     }
 
-    /// Items order by key so a collection of config items lists
-    /// alphabetically regardless of backend.
+    /// A key-only fallback for external conformers. Conformers whose equality
+    /// includes additional identity fields should provide their own ordering,
+    /// as the library's built-in item types do.
     public static func < (lhs: Self, rhs: Self) -> Bool {
         lhs.key < rhs.key
     }

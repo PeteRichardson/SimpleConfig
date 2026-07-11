@@ -155,6 +155,27 @@ struct SecureConfigItemDeleteTests {
     }
 }
 
+@Suite("Config item ordering")
+struct ConfigItemOrderingTests {
+    @Test("plain items with the same key in different suites have a total order")
+    func plainItemsAcrossSuites() {
+        let first = ConfigItem(suiteName: "a", key: "shared")
+        let second = ConfigItem(suiteName: "b", key: "shared")
+        #expect(first != second)
+        #expect(first < second)
+        #expect(!(second < first))
+    }
+
+    @Test("secure items with the same key in different services have a total order")
+    func secureItemsAcrossServices() {
+        let first = SecureConfigItem(service: "a", key: "shared")
+        let second = SecureConfigItem(service: "b", key: "shared")
+        #expect(first != second)
+        #expect(first < second)
+        #expect(!(second < first))
+    }
+}
+
 @Suite("ConfigItem enumeration")
 struct ConfigItemEnumerationTests {
     @Test("items(inSuite:) returns all written items sorted by key")
@@ -304,6 +325,18 @@ struct KeychainReadErrorTests {
         defer { try? item.delete() }
         #expect(try item.read() == "hello")
     }
+
+    @Test("writing an existing key updates its value")
+    func overwriteUpdatesValue() throws {
+        let item = SecureConfigItem(
+            service: "com.peterichardson.SimpleConfigTests.read-errors",
+            key: "overwrite"
+        )
+        defer { try? item.delete() }
+        try item.write("old value")
+        try item.write("new value")
+        #expect(try item.read() == "new value")
+    }
 }
 
 @Suite("ConfigItem Data values")
@@ -359,6 +392,15 @@ struct SecureConfigItemDataTests {
         try item.write(bytes)
         defer { try? item.delete() }
         #expect(try item.readData() == bytes)
+    }
+
+    @Test("writing existing data updates its bytes")
+    func dataOverwrite() throws {
+        let item = SecureConfigItem(service: service, key: "overwrite-blob")
+        defer { try? item.delete() }
+        try item.write(Data([0x01]))
+        try item.write(Data([0x02, 0x03]))
+        #expect(try item.readData() == Data([0x02, 0x03]))
     }
 
     @Test("write(Data) with non-UTF8 bytes then read() returns nil")
