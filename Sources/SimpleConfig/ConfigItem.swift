@@ -16,6 +16,12 @@ public struct ConfigItem: ConfigStorable {
     /// The defaults key the value is stored under.
     public let key: String
 
+    /// Orders items by suite and then key, consistent with memberwise
+    /// equality. Within one suite this remains alphabetical by key.
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        (lhs.suiteName, lhs.key) < (rhs.suiteName, rhs.key)
+    }
+
     /// Renders as `key = value`. A value stored only as `Data` renders
     /// as its byte count instead of the (misleading) `(not set)`; a
     /// failed read — e.g. an invalid suite name — also renders as
@@ -133,6 +139,12 @@ public struct SecureConfigItem: ConfigStorable {
     public let service: String
     /// The Keychain account name the secret is stored as (`kSecAttrAccount`).
     public let key: String
+
+    /// Orders items by service and then key, consistent with memberwise
+    /// equality. Within one service this remains alphabetical by key.
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        (lhs.service, lhs.key) < (rhs.service, rhs.key)
+    }
 
     /// Reads the secret from the Keychain.
     ///
