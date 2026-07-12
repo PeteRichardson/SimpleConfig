@@ -199,11 +199,12 @@ The property-wrapper layer adds:
 - `ConfigGroup` — free conformance for all-defaults structs: `configErrors` / `isConfigValid` probe every property (nested groups recursively), `try MyConfig.read()` constructs and validates in one call
 
 Errors: `ConfigItem` throws `ConfigError.unableToLoad` when the suite name
-is invalid (e.g. `NSGlobalDomain` or your app's own bundle identifier);
-Keychain failures surface as `NSError` with the OSStatus code. The wrapper
-layer adds `ConfigError.noDomain` (no explicit domain and
-`SimpleConfig.defaultDomain` unset) and `ConfigError.invalidGroup` (thrown
-by `ConfigGroup.read()`, keyed by property path).
+is invalid (e.g. `NSGlobalDomain` or your app's own bundle identifier).
+Keychain failures throw `ConfigError.keychain(operation:status:)`, preserving
+the failed operation and raw Security status without exposing an ad-hoc
+`NSError` domain. The wrapper layer adds `ConfigError.noDomain` (no explicit
+domain and `SimpleConfig.defaultDomain` unset) and `ConfigError.invalidGroup`
+(thrown by `ConfigGroup.read()`, keyed by property path).
 
 Architecture details live in [docs/design.md](docs/design.md).
 

@@ -298,9 +298,51 @@ struct KeychainIsPresentTests {
 
     @Test("any other status throws")
     func otherStatusThrows() {
-        #expect(throws: NSError.self) {
+        #expect(throws: ConfigError.self) {
             try Keychain.isPresent(errSecAuthFailed)
         }
+    }
+}
+
+@Suite("Keychain error translation")
+struct KeychainErrorTranslationTests {
+    @Test("every operation preserves its operation and status", arguments: [
+        KeychainOperation.read,
+        .write,
+        .update,
+        .delete,
+        .list,
+    ])
+    func operationAndStatus(operation: KeychainOperation) {
+        let status = errSecAuthFailed
+        let error = Keychain.error(operation: operation, status: status)
+
+        guard case .keychain(let actualOperation, let actualStatus) = error else {
+            Issue.record("expected ConfigError.keychain, got \(error)")
+            return
+        }
+        #expect(actualOperation.rawValue == operation.rawValue)
+        #expect(actualStatus == Int32(status))
+    }
+
+    @Test("description includes the system message and numeric status")
+    func descriptionWithMessage() {
+        let output = ConfigError.keychainDescription(
+            operation: .read,
+            status: -25308,
+            message: "User interaction is not allowed."
+        )
+        #expect(output == "Keychain read failed: User interaction is not allowed. (-25308)")
+    }
+
+    @Test("description falls back when no system message is available")
+    func descriptionWithoutMessage() {
+        let output = ConfigError.keychainDescription(
+            operation: .write,
+            status: -1,
+            message: nil
+        )
+        #expect(output == "Keychain write failed: Unknown Keychain error (-1)")
     }
 }
 
