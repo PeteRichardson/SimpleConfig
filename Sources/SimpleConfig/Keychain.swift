@@ -32,16 +32,12 @@ enum Keychain {
         if status == errSecDuplicateItem {
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
             guard updateStatus == errSecSuccess else {
-                throw NSError(
-                    domain: "Keychain", code: Int(updateStatus),
-                    userInfo: [NSLocalizedDescriptionKey: "Unable to update keychain item"])
+                throw error(operation: .update, status: updateStatus)
             }
             return
         }
         guard status == errSecSuccess else {
-            throw NSError(
-                domain: "Keychain", code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Unable to save keychain item"])
+            throw error(operation: .write, status: status)
         }
     }
 
@@ -55,13 +51,11 @@ enum Keychain {
     /// `true` if `status` is `errSecSuccess`, `false` if
     /// `errSecItemNotFound`; throws for any other status.
     ///
-    /// - Throws: `NSError(domain: "Keychain")` for a genuine failure status.
+    /// - Throws: `ConfigError.keychain` for a genuine failure status.
     static func isPresent(_ status: OSStatus) throws -> Bool {
         if status == errSecSuccess { return true }
         if status == errSecItemNotFound { return false }
-        throw NSError(
-            domain: "Keychain", code: Int(status),
-            userInfo: [NSLocalizedDescriptionKey: "Unable to read keychain item"])
+        throw error(operation: .read, status: status)
     }
 
     /// Returns the stored bytes for the service/account pair, or `nil`
@@ -109,9 +103,7 @@ enum Keychain {
 
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw NSError(
-                domain: "Keychain", code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Unable to delete keychain item"])
+            throw error(operation: .delete, status: status)
         }
     }
 
@@ -132,11 +124,13 @@ enum Keychain {
 
         if status == errSecItemNotFound { return [] }
         guard status == errSecSuccess else {
-            throw NSError(
-                domain: "Keychain", code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Unable to list keychain items"])
+            throw error(operation: .list, status: status)
         }
         let attributes = result as? [[String: Any]] ?? []
         return attributes.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
+
+    static func error(operation: KeychainOperation, status: OSStatus) -> ConfigError {
+        .keychain(operation: operation, status: Int32(status))
     }
 }

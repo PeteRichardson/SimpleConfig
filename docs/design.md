@@ -41,7 +41,7 @@ The secret-storage implementation. Each item carries a `service` and a `key`, ma
 An internal enum wrapping the Security framework's C-style API (`SecItemAdd`, `SecItemUpdate`, `SecItemCopyMatching`, `SecItemDelete`) for generic-password items. A write first attempts `SecItemAdd`; if the service/account pair already exists (`errSecDuplicateItem`), it updates that item in place with `SecItemUpdate`. This preserves the existing secret if the initial add fails and avoids a delete/add gap during replacement. Items are stored with `kSecAttrAccessibleAfterFirstUnlock` so background processes can read them after a reboot once the device has been unlocked. `readData`/`write(_ data:for:service:)` are the byte-level primitives; `read`/`write(_ value: String, ...)` are thin wrappers that add a UTF-8 encode/decode step. `readData` (and so `read`) distinguishes three outcomes: a successful fetch, an absent item (`errSecItemNotFound`), and a genuine failure — the first two return the stored bytes (or `nil`) respectively, the third throws, via the internal `isPresent` helper. This type is deliberately not public — consumers go through `SecureConfigItem`.
 
 **ConfigError** (`Sources/SimpleConfig/ConfigError.swift`)
-A public error enum (`unableToLoad`, `unknown`, `noDomain`, `invalidGroup`) intended as the library's error surface. `ConfigItem` throws `.unableToLoad` when its `UserDefaults` suite can't be created (e.g. a reserved name like `NSGlobalDomain`); `Keychain` still throws raw `NSError` instead (see Open Questions).
+A public error enum (`unableToLoad`, `unknown`, `keychain`, `noDomain`, `invalidGroup`) that provides the library's common error surface. `ConfigItem` throws `.unableToLoad` when its `UserDefaults` suite can't be created (e.g. a reserved name like `NSGlobalDomain`). Keychain failures throw `.keychain(operation:status:)`, which retains a structured `KeychainOperation` and raw status as `Int32`; its description adds the Security framework's human-readable message when available. Storing the status as `Int32` lets callers inspect it without importing Security.
 
 **SimpleConfig** (`Sources/SimpleConfig/SimpleConfig.swift`)
 A caseless enum namespace. Its one member, `defaultDomain: String?`, is the process-wide fallback for wrapper properties declared without an explicit `suite:`/`service:` — set once at app startup. It is guarded by an `NSLock` (not `Synchronization.Mutex`, which would force a macOS 15+ platform floor).
@@ -95,12 +95,6 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 
 ---
 
-## Open Questions
-
-- [ ] Keychain operations still throw ad-hoc `NSError` values instead of `ConfigError`, which `ConfigItem` uses. Should the library standardize on `ConfigError` throughout?
-
----
-
 ## Document History
 
 | Date | Change |
@@ -114,3 +108,4 @@ Nothing to configure. Development requires a Swift 6.2 toolchain on an Apple pla
 | 2026-07-03 | Added `readData()`/`write(_ data: Data)` to `ConfigItem` and `SecureConfigItem`; `description` on both types renders binary values by byte count |
 | 2026-07-05 | Added the property-wrapper layer: `@Stored`/`@Secure`, `ConfigValue`, `ConfigGroup` (with recursive probing and `read()`), `SimpleConfig.defaultDomain`, and `ConfigError.noDomain`/`.invalidGroup` |
 | 2026-07-11 | Updated Keychain writes to document add-then-update behavior; corrected ordering, redaction, error-message, and test-coverage descriptions |
+| 2026-07-11 | Standardized Keychain failures as structured `ConfigError.keychain` values that preserve the operation and OS status |
